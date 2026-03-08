@@ -86,9 +86,6 @@ public:
    */
   ComportamientoTecnico(unsigned int size = 0) : Comportamiento(size) {
     // Inicializar Variables de Estado
-    last_action = IDLE;
-    tiene_zapatillas = false;
-    instante = 0;
   }
 
   /**
@@ -100,9 +97,7 @@ public:
                        std::vector<std::vector<unsigned char>> mapaC): 
                        Comportamiento(mapaR, mapaC) {
     // Inicializar Variables de Estado
-    last_action = IDLE;
-    tiene_zapatillas = false;
-    instante = 0;
+
   }
 
   ComportamientoTecnico(const ComportamientoTecnico &comport): Comportamiento(comport) {}
@@ -125,84 +120,59 @@ public:
   // =========================================================================
   // ÁREA DE IMPLEMENTACIÓN DEL ESTUDIANTE
   // =========================================================================
-
-  /**
-   * @brief Calcula el coste de realizar una acción desde un estado determinado.
-   * @param origen Estado actual del agente.
-   * @param accion Acción que se pretende realizar.
-   * @return Coste de la acción (p.e. basado en el tipo de terreno).
-   * 
-   * NOTA: El técnico puede tener costes diferentes al ingeniero para las mismas acciones.
-   */
-  int CosteDeLaAccion(const estadoT &origen, Action accion);
-
-  /**
-   * @brief Algoritmo de búsqueda de caminos para el técnico.
-   * @param origen Estado inicial.
-   * @param destino Estado objetivo.
-   * @param plan Lista de acciones resultante (se llena por referencia).
-   * @return true si se encontró un camino, false en caso contrario.
-   * 
-   * CONSIDERACIONES ESPECIALES PARA EL TÉCNICO:
-   * - Puede usar acciones especiales (DIG, RAISE) para modificar el terreno
-   * - Debe considerar la colaboración con el ingeniero
-   */
-  bool pathFinding(const estadoT &origen, const estadoT &destino, std::list<Action> &plan);
-
-  // Funciones específicas para cada nivel del técnico
   
-  /**
-   * @brief Nivel 0: Comportamiento reactivo básico.
-   * OBJETIVO: Alcanzar una casilla 'U' (objetivo) priorizando caminos.
-   * ESTRATEGIA: Similar al ingeniero nivel 0.
-   */
+/**
+ * @brief Comportamiento del ingeniero para el Nivel 0.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
   Action ComportamientoTecnicoNivel_0(Sensores sensores);
   
-  /**
-   * @brief Nivel 1: Comportamiento reactivo mejorado.
-   * OBJETIVO: Mejorar el nivel 0 considerando más sensores.
-   * ESTRATEGIA: Usar sensores adicionales para mejores decisiones.
-   */
+/**
+ * @brief Comportamiento del ingeniero para el Nivel 1.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
   Action ComportamientoTecnicoNivel_1(Sensores sensores);
   
-  /**
-   * @brief Nivel 2: Búsqueda con información completa.
-   * OBJETIVO: Encontrar camino óptimo al objetivo usando pathFinding.
-   * CONDICIÓN: Se conoce todo el mapa.
-   */
+/**
+ * @brief Comportamiento del ingeniero para el Nivel 2.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
   Action ComportamientoTecnicoNivel_2(Sensores sensores);
   
-  /**
-   * @brief Nivel 3: Búsqueda con información parcial.
-   * OBJETIVO: Explorar mapa desconocido y encontrar objetivos.
-   * ESTRATEGIA: Combinar exploración con búsqueda.
-   */
+/**
+ * @brief Comportamiento del ingeniero para el Nivel 3.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
   Action ComportamientoTecnicoNivel_3(Sensores sensores);
   
-  /**
-   * @brief Nivel 4: Colaboración básica con ingeniero.
-   * OBJETIVO: Responder a llamadas del ingeniero (sensores.venpaca).
-   * ESTRATEGIA: Ir a las coordenadas indicadas por el ingeniero.
-   */
+/**
+ * @brief Comportamiento del ingeniero para el Nivel 4.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
   Action ComportamientoTecnicoNivel_4(Sensores sensores);
   
-  /**
-   * @brief Nivel 5: Colaboración intermedia.
-   * OBJETIVO: Realizar tareas conjuntas con el ingeniero.
-   * ESTRATEGIA: Coordinar acciones cuando están enfrente (sensores.enfrente).
-   */
+/**
+ * @brief Comportamiento del ingeniero para el Nivel 5.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
   Action ComportamientoTecnicoNivel_5(Sensores sensores);
   
-  /**
-   * @brief Nivel 6: Colaboración avanzada.
-   * OBJETIVO: Resolver problemas complejos que requieren ambos agentes.
-   * ESTRATEGIA: Planificación conjunta y uso de acciones especiales.
-   */
+/**
+ * @brief Comportamiento del ingeniero para el Nivel 6.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
   Action ComportamientoTecnicoNivel_6(Sensores sensores);
 
 protected:
   // =========================================================================
-  // PRIMITIVAS SENSORIALES-MOTORAS (PROPORCIONADAS)
+  // FUNCIONES PROPORCIONADAS
   // =========================================================================
 
   /**
@@ -244,20 +214,33 @@ protected:
    */
   bool es_camino(unsigned char c) const;
 
+    /**
+ * @brief Imprime por consola la secuencia de acciones de un plan para un agente.
+ * @param plan  Lista de acciones del plan.
+ */
+  void PintaPlan(const list<Action> &plan);
+
+
+/**
+ * @brief Imprime las coordenadas y operaciones de un plan de tubería.
+ * @param plan  Lista de pasos (fila, columna, operación).
+ */
+  void PintaPlan(const list<Paso> &plan);
+
+
+  /**
+ * @brief Convierte un plan de acciones en una lista de casillas para
+ *        su visualización en el mapa gráfico.
+ * @param st    Estado de partida.
+ * @param plan  Lista de acciones del plan.
+ */
+  void VisualizaPlan(const estadoT &st, const list<Action> &plan);
 
 private:
   // =========================================================================
   // VARIABLES DE ESTADO (PUEDEN SER EXTENDIDAS POR EL ALUMNO)
   // =========================================================================
-  
-  /// Última acción realizada con éxito por el técnico.
-  Action last_action;
-  
-  /// Indica si el técnico posee actualmente las zapatillas.
-  bool tiene_zapatillas;
-  
-  /// Contador de instantes del técnico.
-  int instante;
+
   
 };
 

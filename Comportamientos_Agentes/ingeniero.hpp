@@ -59,8 +59,6 @@ struct estadoI {
      * TAREA DEL ESTUDIANTE: Redefinir el operador menor para usar estados en contenedores ordenados.
      * Ejemplo: std::set<estadoI> o std::map<estadoI, valor>
      * 
-     * PISTA: Un estado es "menor" que otro si alguna de sus componentes es menor,
-     * comparando en orden: fila, columna, orientacion, zap.
      */
     if (fila < n.fila) 
       return true;
@@ -79,8 +77,6 @@ struct ComparaEstadosI {
      * TAREA DEL ESTUDIANTE: Functor alternativo para comparar estados.
      * Útil para colas de prioridad (priority_queue).
      * 
-     * PISTA: En priority_queue, el elemento "más grande" según el comparador
-     * es el que tiene mayor prioridad (se saca primero).
      */
     if ((a.fila > n.fila))
       return true;
@@ -103,9 +99,6 @@ public:
    */
   ComportamientoIngeniero(unsigned int size = 0) : Comportamiento(size) {
     // Inicializar Variables de Estado
-    last_action = IDLE;
-    tiene_zapatillas = false;
-    instante = 0;
   }
 
   /**
@@ -117,9 +110,6 @@ public:
                          std::vector<std::vector<unsigned char>> mapaC): 
                          Comportamiento(mapaR, mapaC) {
     // Inicializar Variables de Estado
-    last_action = IDLE;
-    tiene_zapatillas = false;
-    instante = 0;
   }
 
   ComportamientoIngeniero(const ComportamientoIngeniero &comport)
@@ -144,98 +134,60 @@ public:
   // ÁREA DE IMPLEMENTACIÓN DEL ESTUDIANTE
   // =========================================================================
 
-  /**
-   * @brief Calcula el coste de realizar una acción desde un estado determinado.
-   * @param origen Estado actual del agente.
-   * @param accion Acción que se pretende realizar.
-   * @return Coste de la acción (p.e. basado en el tipo de terreno).
-   * 
-   * EJEMPLO DE IMPLEMENTACIÓN:
-   * - Terreno 'C' (camino): coste 1
-   * - Terreno 'S' (sendero): coste 2
-   * - Terreno 'B' (bosque): coste 5 sin zapatillas, 2 con zapatillas
-   * - Terreno 'H' (arena): coste 3
-   * - Acción JUMP: coste adicional 2
-   */
-  int CosteDeLaAccion(const estadoI &origen, Action accion);
-
-  /**
-   * @brief Algoritmo de búsqueda de caminos.
-   * @param origen Estado inicial.
-   * @param destino Estado objetivo.
-   * @param plan Lista de acciones resultante (se llena por referencia).
-   * @return true si se encontró un camino, false en caso contrario.
-   * 
-   * ALGORITMOS SUGERIDOS:
-   * - BFS (Breadth-First Search): Para encontrar el camino más corto en pasos
-   * - UCS (Uniform Cost Search): Para minimizar coste acumulado
-   * - A* (A-star): Para búsqueda heurística eficiente
-   * 
-   * ESTRUCTURAS DE DATOS ÚTILES:
-   * - std::queue<estadoI> para BFS
-   * - std::priority_queue<estadoI> para UCS/A*
-   * - std::map<estadoI, estadoI> para reconstruir el camino
-   * - std::map<estadoI, int> para costes acumulados
-   */
-  bool pathFinding(const estadoI &origen, const estadoI &destino, std::list<Action> &plan);
-
   // Funciones específicas para cada nivel (para ser implementadas por el alumno)
   
   /**
-   * @brief Implementación del comportamiento reactivo para el Nivel 0.
-   * OBJETIVO: Alcanzar una casilla 'U' (objetivo) priorizando caminos 
-   * y evitando bucles mediante el uso de la matriz de tiempo.
-   * ESTRATEGIA: Seguir caminos ('C'), girar cuando no haya camino adelante.
+   * @brief Implementación del Nivel 0.
    * @param sensores Datos actuales de los sensores del agente.
    * @return Acción a realizar.
    */
   Action ComportamientoIngenieroNivel_0(Sensores sensores);
   
   /**
-   * @brief Nivel 1: Comportamiento reactivo mejorado.
-   * OBJETIVO: Mejorar el nivel 0 considerando más sensores y evitando callejones.
-   * ESTRATEGIA: Usar sensores[1] (izquierda) y sensores[3] (derecha) para decisiones.
+   * @brief Implementación del Nivel 1.
+   * @param sensores Datos actuales de los sensores del agente.
+   * @return Acción a realizar.
    */
   Action ComportamientoIngenieroNivel_1(Sensores sensores);
   
   /**
-   * @brief Nivel 2: Búsqueda con información completa.
-   * OBJETIVO: Encontrar camino óptimo al objetivo usando pathFinding.
-   * CONDICIÓN: Se conoce todo el mapa (mapaResultado está completo).
-   */
+   * @brief Implementación del Nivel 2.
+   * @param sensores Datos actuales de los sensores del agente.
+   * @return Acción a realizar.
+   */ 
   Action ComportamientoIngenieroNivel_2(Sensores sensores);
   
   /**
-   * @brief Nivel 3: Búsqueda con información parcial.
-   * OBJETIVO: Explorar mapa desconocido y encontrar objetivos.
-   * ESTRATEGIA: Combinar exploración con búsqueda hacia áreas desconocidas.
+   * @brief Implementación del Nivel 3.
+   * @param sensores Datos actuales de los sensores del agente.
+   * @return Acción a realizar.
    */
   Action ComportamientoIngenieroNivel_3(Sensores sensores);
   
   /**
-   * @brief Nivel 4: Planificación con múltiples objetivos.
-   * OBJETIVO: Visitar varios objetivos en orden óptimo.
-   * ESTRATEGIA: Algoritmo de planificación de rutas (TSP simple).
+   * @brief Implementación del Nivel 4.
+   * @param sensores Datos actuales de los sensores del agente.
+   * @return Acción a realizar.
    */
   Action ComportamientoIngenieroNivel_4(Sensores sensores);
   
   /**
-   * @brief Nivel 5: Colaboración básica con técnico.
-   * OBJETIVO: Coordinar acciones con el técnico para tareas conjuntas.
-   * COMUNICACIÓN: Usar sensores.venpaca y sensores.GotoF/GotoC.
+   * @brief Implementación del Nivel 5.
+   * @param sensores Datos actuales de los sensores del agente.
+   * @return Acción a realizar.
    */
   Action ComportamientoIngenieroNivel_5(Sensores sensores);
   
   /**
-   * @brief Nivel 6: Colaboración avanzada.
-   * OBJETIVO: Resolver problemas complejos que requieren ambos agentes.
-   * ESTRATEGIA: Planificación conjunta y comunicación bidireccional.
+   * @brief Implementación del Nivel 6.
+   * @param sensores Datos actuales de los sensores del agente.
+   * @return Acción a realizar.
    */
   Action ComportamientoIngenieroNivel_6(Sensores sensores);
 
 protected:
   // =========================================================================
-  // PRIMITIVAS SENSORIALES-MOTORAS (PROPORCIONADAS)
+  // FUNCIONES PROPORCIONADAS
   // =========================================================================
 
   /**
@@ -269,27 +221,44 @@ protected:
    */
   estadoI Delante(const estadoI &actual) const;
 
-  /**
-   * @brief Comprueba si una celda es de tipo transitable por defecto (camino, sendero, etc).
-   * @param c Carácter que representa el tipo de superficie.
-   * @return true si es una casilla de tipo camino ('C', 'S', 'D' o 'U').
-   */
   bool es_camino(unsigned char c) const;
+
+  /**
+ * @brief Imprime por consola la secuencia de acciones de un plan para un agente.
+ * @param plan  Lista de acciones del plan.
+ */
+  void PintaPlan(const list<Action> &plan);
+
+
+/**
+ * @brief Imprime las coordenadas y operaciones de un plan de tubería.
+ * @param plan  Lista de pasos (fila, columna, operación).
+ */
+  void PintaPlan(const list<Paso> &plan);
+
+
+  /**
+ * @brief Convierte un plan de acciones en una lista de casillas para
+ *        su visualización en el mapa gráfico.
+ * @param st    Estado de partida.
+ * @param plan  Lista de acciones del plan.
+ */
+  void VisualizaPlan(const estadoI &st, const list<Action> &plan);
+
+  /**
+ * @brief Convierte un plan de tubería en la lista de casillas usada
+ *        por el sistema de visualización.
+ * @param st    Estado de partida (no utilizado directamente).
+ * @param plan  Lista de pasos del plan de tubería.
+ */
+  void VisualizaRedTuberias(const estadoI &st, const list<Paso> &plan);
+
 
 
 private:
   // =========================================================================
   // VARIABLES DE ESTADO (PUEDEN SER EXTENDIDAS POR EL ALUMNO)
   // =========================================================================
-  
-  /// Última acción realizada con éxito por el agente.
-  Action last_action;
-  
-  /// Indica si el ingeniero posee actualmente las zapatillas.
-  bool tiene_zapatillas;
-  
-  /// Contador global de instantes de la simulación.
-  int instante;
 
 };
 

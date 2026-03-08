@@ -6,9 +6,6 @@
 
 using namespace std;
 
-/// Valor centinela para indicar que una celda no es transitable.
-const int TIEMPO_NO_TRANSITABLE = 1000000;
-
 // =========================================================================
 // ÁREA DE IMPLEMENTACIÓN DEL ESTUDIANTE
 // =========================================================================
@@ -16,8 +13,6 @@ const int TIEMPO_NO_TRANSITABLE = 1000000;
 Action ComportamientoTecnico::think(Sensores sensores) {
   Action accion = IDLE;
 
-  // Actualizar el mapa interno (Proporcionado)
-  ActualizarMapa(sensores);
 
   // Decisión del agente según el nivel
   switch (sensores.nivel) {
@@ -30,7 +25,6 @@ Action ComportamientoTecnico::think(Sensores sensores) {
     case 6: accion = ComportamientoTecnicoNivel_6(sensores); break;
   }
 
-  last_action = accion;
   return accion;
 }
 
@@ -39,20 +33,6 @@ Action ComportamientoTecnico::think(Sensores sensores) {
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
   Action accion = IDLE;
 
-  // Si ya estamos en la meta, no hacer nada
-  if (sensores.superficie[0] == 'U') return IDLE;
-
-  // Actualizar estado temporal y zapatillas
-  instante++;
-  if (sensores.superficie[0] == 'D') tiene_zapatillas = true;
-
-  // Si delante tengo camino, avanzo, sino giro a la izda.
-  if (sensores.superficie[2] == 'C')
-    accion = WALK;
-  else
-    accion = TURN_SL;
-
-  last_action = accion;
   return accion;
 }
 
@@ -124,7 +104,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores) {
 
 
 // =========================================================================
-// PRIMITIVAS SENSORIALES-MOTORAS (PROPORCIONADAS - NO MODIFICAR)
+// FUNCIONES PROPORCIONADAS
 // =========================================================================
 
 /**
@@ -345,3 +325,153 @@ estadoT ComportamientoTecnico::Delante(const estadoT &actual) const {
   }
   return delante;
 }
+
+
+/**
+ * @brief Imprime por consola la secuencia de acciones de un plan.
+ *
+ * @param plan  Lista de acciones del plan.
+ */
+void ComportamientoTecnico::PintaPlan(const list<Action> &plan)
+{
+  auto it = plan.begin();
+  while (it != plan.end())
+  {
+    if (*it == WALK)
+    {
+      cout << "W ";
+    }
+    else if (*it == JUMP)
+    {
+      cout << "J ";
+    }
+    else if (*it == TURN_SR)
+    {
+      cout << "r ";
+    }
+    else if (*it == TURN_SL)
+    {
+      cout << "l ";
+    }
+    else if (*it == COME)
+    {
+      cout << "C ";
+    }
+    else if (*it == IDLE)
+    {
+      cout << "I ";
+    }
+    else
+    {
+      cout << "-_ ";
+    }
+    it++;
+  }
+  cout << "( longitud " << plan.size() << ")" << endl;
+}
+
+
+
+/**
+ * @brief Convierte un plan de acciones en una lista de casillas para
+ *        su visualización en el mapa 2D.
+ *
+ * @param st    Estado de partida.
+ * @param plan  Lista de acciones del plan.
+ */
+void ComportamientoTecnico::VisualizaPlan(const estadoT &st,
+                                            const list<Action> &plan)
+{
+  listaPlanCasillas.clear();
+  estadoT cst = st;
+
+  listaPlanCasillas.push_back({cst.fila, cst.columna, WALK});
+  auto it = plan.begin();
+  while (it != plan.end())
+  {
+
+    switch (*it)
+    {
+    case JUMP:
+      switch (cst.orientacion)
+      {
+      case 0:
+        cst.fila--;
+        break;
+      case 1:
+        cst.fila--;
+        cst.columna++;
+        break;
+      case 2:
+        cst.columna++;
+        break;
+      case 3:
+        cst.fila++;
+        cst.columna++;
+        break;
+      case 4:
+        cst.fila++;
+        break;
+      case 5:
+        cst.fila++;
+        cst.columna--;
+        break;
+      case 6:
+        cst.columna--;
+        break;
+      case 7:
+        cst.fila--;
+        cst.columna--;
+        break;
+      }
+      if (cst.fila >= 0 && cst.fila < mapaResultado.size() &&
+          cst.columna >= 0 && cst.columna < mapaResultado[0].size())
+        listaPlanCasillas.push_back({cst.fila, cst.columna, JUMP});
+    case WALK:
+      switch (cst.orientacion)
+      {
+      case 0:
+        cst.fila--;
+        break;
+      case 1:
+        cst.fila--;
+        cst.columna++;
+        break;
+      case 2:
+        cst.columna++;
+        break;
+      case 3:
+        cst.fila++;
+        cst.columna++;
+        break;
+      case 4:
+        cst.fila++;
+        break;
+      case 5:
+        cst.fila++;
+        cst.columna--;
+        break;
+      case 6:
+        cst.columna--;
+        break;
+      case 7:
+        cst.fila--;
+        cst.columna--;
+        break;
+      }
+      if (cst.fila >= 0 && cst.fila < mapaResultado.size() &&
+          cst.columna >= 0 && cst.columna < mapaResultado[0].size())
+        listaPlanCasillas.push_back({cst.fila, cst.columna, WALK});
+      break;
+    case TURN_SR:
+      cst.orientacion = (cst.orientacion + 1) % 8;
+      break;
+    case TURN_SL:
+      cst.orientacion = (cst.orientacion + 7) % 8;
+      break;
+    }
+    it++;
+  }
+}
+
+
