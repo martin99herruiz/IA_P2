@@ -122,49 +122,49 @@ public:
   // =========================================================================
   
 /**
- * @brief Comportamiento del ingeniero para el Nivel 0.
+ * @brief Comportamiento del técnico para el Nivel 0.
  * @param sensores Datos actuales de los sensores.
  * @return Acción a realizar.
  */
   Action ComportamientoTecnicoNivel_0(Sensores sensores);
   
 /**
- * @brief Comportamiento del ingeniero para el Nivel 1.
+ * @brief Comportamiento del técnico para el Nivel 1.
  * @param sensores Datos actuales de los sensores.
  * @return Acción a realizar.
  */
   Action ComportamientoTecnicoNivel_1(Sensores sensores);
   
 /**
- * @brief Comportamiento del ingeniero para el Nivel 2.
+ * @brief Comportamiento del técnico para el Nivel 2.
  * @param sensores Datos actuales de los sensores.
  * @return Acción a realizar.
  */
   Action ComportamientoTecnicoNivel_2(Sensores sensores);
   
 /**
- * @brief Comportamiento del ingeniero para el Nivel 3.
+ * @brief Comportamiento del técnico para el Nivel 3.
  * @param sensores Datos actuales de los sensores.
  * @return Acción a realizar.
  */
   Action ComportamientoTecnicoNivel_3(Sensores sensores);
   
 /**
- * @brief Comportamiento del ingeniero para el Nivel 4.
+ * @brief Comportamiento del técnico para el Nivel 4.
  * @param sensores Datos actuales de los sensores.
  * @return Acción a realizar.
  */
   Action ComportamientoTecnicoNivel_4(Sensores sensores);
   
 /**
- * @brief Comportamiento del ingeniero para el Nivel 5.
+ * @brief Comportamiento del técnico para el Nivel 5.
  * @param sensores Datos actuales de los sensores.
  * @return Acción a realizar.
  */
   Action ComportamientoTecnicoNivel_5(Sensores sensores);
   
 /**
- * @brief Comportamiento del ingeniero para el Nivel 6.
+ * @brief Comportamiento del técnico para el Nivel 6.
  * @param sensores Datos actuales de los sensores.
  * @return Acción a realizar.
  */
@@ -208,9 +208,9 @@ protected:
   estadoT Delante(const estadoT &actual) const;
 
   /**
-   * @brief Comprueba si una celda es de tipo transitable por defecto (camino, sendero, etc).
+   * @brief Comprueba si una celda es de tipo transitable por defecto.
    * @param c Carácter que representa el tipo de superficie.
-   * @return true si es una casilla de tipo camino ('C', 'S', 'D' o 'U').
+   * @return true si es camino ('C'), zapatillas ('D') o meta ('U').
    */
   bool es_camino(unsigned char c) const;
 

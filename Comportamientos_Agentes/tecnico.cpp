@@ -39,7 +39,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores) {
 /**
  * @brief Comprueba si una celda es de tipo camino transitable.
  * @param c Carácter que representa el tipo de superficie.
- * @return true si es camino ('C'), sendero ('S'), zapatillas ('D') o meta ('U').
+ * @return true si es camino ('C'), zapatillas ('D') o meta ('U').
  */
 bool ComportamientoTecnico::es_camino(unsigned char c) const {
   return (c == 'C' || c == 'D' || c == 'U');
