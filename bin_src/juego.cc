@@ -11,7 +11,7 @@ int main(int argc, char **argv)
 {
   EnLinea argumentos;
   // Valores por defecto
-  argumentos.ubicacion_mapa = "./mapas/00mapa30.map";
+  argumentos.ubicacion_mapa = "./mapas/mapa30.map";
   argumentos.semilla = 0;
   argumentos.level = 0;
   argumentos.posInicialIngeniero.f = -1;
