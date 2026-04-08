@@ -10,6 +10,38 @@ using namespace std;
 // ÁREA DE IMPLEMENTACIÓN DEL ESTUDIANTE
 // =========================================================================
 
+char ViablePorAlturaI(char casilla, int dif, bool zap){
+  if ((!zap && abs(dif) <= 1) || (zap && abs(dif) <= 2))
+    return casilla;
+  else
+    return 'P';
+}
+
+int VeoCasillaInteresanteNivel1I(char i, char c, char d){
+  if (c == 'C' || c == 'S') return 2;
+  else if (i == 'C' || i == 'S') return 1;
+  else if (d == 'C' || d == 'S') return 3;
+  return 0;
+}
+
+int VeoCasillaInteresanteI(char i, char c, char d, bool zap){
+  if (c == 'U') return 2;
+  else if (i == 'U') return 1;
+  else if (d == 'U') return 3;
+
+  if (!zap){
+    if (c == 'D') return 2;
+    else if (i == 'D') return 1;
+    else if (d == 'D') return 3;
+  }
+
+  if (c == 'C') return 2;
+  else if (i == 'C') return 1;
+  else if (d == 'C') return 3;
+
+  return 0;
+}
+
 Action ComportamientoIngeniero::think(Sensores sensores)
 {
   Action accion = IDLE;
@@ -47,6 +79,37 @@ Action ComportamientoIngeniero::think(Sensores sensores)
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores)
 {
   Action accion = IDLE;
+  
+  ActualizarMapa(sensores);
+
+  if (sensores.superficie[0] == 'D')
+    tiene_zapatillas = true;
+
+  if (sensores.superficie[0] == 'U')
+    return IDLE;
+
+  char i = ViablePorAlturaI(sensores.superficie[1],
+                            sensores.cota[1] - sensores.cota[0],
+                            tiene_zapatillas);
+
+  char c = ViablePorAlturaI(sensores.superficie[2],
+                            sensores.cota[2] - sensores.cota[0],
+                            tiene_zapatillas);
+
+  char d = ViablePorAlturaI(sensores.superficie[3],
+                            sensores.cota[3] - sensores.cota[0],
+                            tiene_zapatillas);
+                            
+  int pos = VeoCasillaInteresanteI(i, c, d, tiene_zapatillas);
+
+  switch (pos){
+    case 2: accion = WALK; break;
+    case 1: accion = TURN_SL; break;
+    case 3: accion = TURN_SR; break;
+    default: accion = TURN_SL; break;
+  }
+
+  last_action = accion;
   return accion;
 }
 
@@ -67,8 +130,62 @@ bool ComportamientoIngeniero::es_camino(unsigned char c) const
  */
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_1(Sensores sensores)
 {
-  // TODO: Implementar comportamiento reactivo para el Nivel 1.
-  return IDLE;
+  Action accion = IDLE;
+
+  ActualizarMapa(sensores);
+
+  if (sensores.superficie[0] == 'D')
+    tiene_zapatillas = true;
+
+  char i = ViablePorAlturaI(sensores.superficie[1],
+                            sensores.cota[1] - sensores.cota[0],
+                            tiene_zapatillas);
+
+  char c = ViablePorAlturaI(sensores.superficie[2],
+                            sensores.cota[2] - sensores.cota[0],
+                            tiene_zapatillas);
+
+  char d = ViablePorAlturaI(sensores.superficie[3],
+                            sensores.cota[3] - sensores.cota[0],
+                            tiene_zapatillas);
+
+  int pos = VeoCasillaInteresanteNivel1I(i, c, d);
+
+  if (sensores.choque) {
+    accion = TURN_SR;
+    giros_consecutivos++;
+  }
+  else {
+    switch (pos) {
+      case 2:
+        accion = WALK;
+        giros_consecutivos = 0;
+        break;
+
+      case 1:
+        accion = TURN_SL;
+        giros_consecutivos++;
+        break;
+
+      case 3:
+        accion = TURN_SR;
+        giros_consecutivos++;
+        break;
+
+      default:
+        // Si lleva muchas vueltas, cambia el sentido del giro
+        if (giros_consecutivos < 4) {
+          accion = TURN_SL;
+        } else {
+          accion = TURN_SR;
+          giros_consecutivos = 0;
+        }
+        break;
+    }
+  }
+
+  last_action = accion;
+  return accion;
 }
 
 // Niveles avanzados (Uso de búsqueda)
