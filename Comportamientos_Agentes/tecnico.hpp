@@ -13,26 +13,37 @@
 // =========================================================================
 /*
  * CLASE: ComportamientoTecnico
- * 
+ *
  * DESCRIPCIÓN:
  * Esta clase implementa el comportamiento del agente Técnico en el mundo Belkan.
  * El técnico colabora con el ingeniero para resolver el problema de instalación de tuberías
  */
 
-
-
-class ComportamientoTecnico : public Comportamiento {
+class ComportamientoTecnico : public Comportamiento
+{
 public:
   // =========================================================================
   // CONSTRUCTORES
   // =========================================================================
-  
+
   /**
    * @brief Constructor para niveles 0, 1 y 6 (sin mapa completo)
    * @param size Tamaño del mapa (si es 0, se inicializa más tarde)
    */
-  ComportamientoTecnico(unsigned int size = 0) : Comportamiento(size) {
+  ComportamientoTecnico(unsigned int size = 0) : Comportamiento(size)
+  {
     // Inicializar Variables de Estado
+    last_action = IDLE;
+    tiene_zapatillas = false;
+    ultimaFila = -1;
+    ultimaCol = -1;
+    ultimaPosF = -1;
+    ultimaPosC = -1;
+    turnos_sin_avanzar = 0;
+    mapaVisitas = vector<vector<int>>(size, vector<int>(size, 0));
+    mano_derecha = true; // Técnico: mano derecha
+    plan_escape = 0;
+    giros_consecutivos = 0;
   }
 
   /**
@@ -40,81 +51,81 @@ public:
    * @param mapaR Mapa de terreno conocido
    * @param mapaC Mapa de cotas conocido
    */
-  ComportamientoTecnico(std::vector<std::vector<unsigned char>> mapaR, 
-                       std::vector<std::vector<unsigned char>> mapaC): 
-                       Comportamiento(mapaR, mapaC) {
+  ComportamientoTecnico(std::vector<std::vector<unsigned char>> mapaR,
+                        std::vector<std::vector<unsigned char>> mapaC) : Comportamiento(mapaR, mapaC)
+  {
     // Inicializar Variables de Estado
-
   }
 
-  ComportamientoTecnico(const ComportamientoTecnico &comport): Comportamiento(comport) {}
+  ComportamientoTecnico(const ComportamientoTecnico &comport) : Comportamiento(comport) {}
   ~ComportamientoTecnico() {}
 
   /**
    * @brief Bucle principal de decisión del técnico.
    * Estudia los sensores y decide la siguiente acción.
-   * 
+   *
    * EJEMPLO DE USO:
    * Action accion = think(sensores);
    * return accion; // El motor ejecutará esta acción
    */
   Action think(Sensores sensores);
 
-  ComportamientoTecnico *clone() {
+  ComportamientoTecnico *clone()
+  {
     return new ComportamientoTecnico(*this);
   }
 
   // =========================================================================
   // ÁREA DE IMPLEMENTACIÓN DEL ESTUDIANTE
   // =========================================================================
-  
-/**
- * @brief Comportamiento del técnico para el Nivel 0.
- * @param sensores Datos actuales de los sensores.
- * @return Acción a realizar.
- */
+
+  /**
+   * @brief Comportamiento del técnico para el Nivel 0.
+   * @param sensores Datos actuales de los sensores.
+   * @return Acción a realizar.
+   */
   Action ComportamientoTecnicoNivel_0(Sensores sensores);
-  
-/**
- * @brief Comportamiento del técnico para el Nivel 1.
- * @param sensores Datos actuales de los sensores.
- * @return Acción a realizar.
- */
+
+  /**
+   * @brief Comportamiento del técnico para el Nivel 1.
+   * @param sensores Datos actuales de los sensores.
+   * @return Acción a realizar.
+   */
   Action ComportamientoTecnicoNivel_1(Sensores sensores);
-  
-/**
- * @brief Comportamiento del técnico para el Nivel 2.
- * @param sensores Datos actuales de los sensores.
- * @return Acción a realizar.
- */
+
+  /**
+   * @brief Comportamiento del técnico para el Nivel 2.
+   * @param sensores Datos actuales de los sensores.
+   * @return Acción a realizar.
+   */
   Action ComportamientoTecnicoNivel_2(Sensores sensores);
-  
-/**
- * @brief Comportamiento del técnico para el Nivel 3.
- * @param sensores Datos actuales de los sensores.
- * @return Acción a realizar.
- */
+
+  /**
+   * @brief Comportamiento del técnico para el Nivel 3.
+   * @param sensores Datos actuales de los sensores.
+   * @return Acción a realizar.
+   */
   Action ComportamientoTecnicoNivel_3(Sensores sensores);
-  
-/**
- * @brief Comportamiento del técnico para el Nivel 4.
- * @param sensores Datos actuales de los sensores.
- * @return Acción a realizar.
- */
+
+  /**
+   * @brief Comportamiento del técnico para el Nivel 4.
+   * @param sensores Datos actuales de los sensores.
+   * @return Acción a realizar.
+   */
   Action ComportamientoTecnicoNivel_4(Sensores sensores);
-  
-/**
- * @brief Comportamiento del técnico para el Nivel 5.
- * @param sensores Datos actuales de los sensores.
- * @return Acción a realizar.
- */
+
+  /**
+   * @brief Comportamiento del técnico para el Nivel 5.
+   * @param sensores Datos actuales de los sensores.
+   * @return Acción a realizar.
+   */
   Action ComportamientoTecnicoNivel_5(Sensores sensores);
-  
-/**
- * @brief Comportamiento del técnico para el Nivel 6.
- * @param sensores Datos actuales de los sensores.
- * @return Acción a realizar.
- */
+
+  /**
+   * @brief Comportamiento del técnico para el Nivel 6.
+   * @param sensores Datos actuales de los sensores.
+   * @return Acción a realizar.
+   */
   Action ComportamientoTecnicoNivel_6(Sensores sensores);
 
 protected:
@@ -161,34 +172,39 @@ protected:
    */
   bool es_camino(unsigned char c) const;
 
-    /**
- * @brief Imprime por consola la secuencia de acciones de un plan para un agente.
- * @param plan  Lista de acciones del plan.
- */
+  /**
+   * @brief Imprime por consola la secuencia de acciones de un plan para un agente.
+   * @param plan  Lista de acciones del plan.
+   */
   void PintaPlan(const list<Action> &plan);
 
-
-/**
- * @brief Imprime las coordenadas y operaciones de un plan de tubería.
- * @param plan  Lista de pasos (fila, columna, operación).
- */
+  /**
+   * @brief Imprime las coordenadas y operaciones de un plan de tubería.
+   * @param plan  Lista de pasos (fila, columna, operación).
+   */
   void PintaPlan(const list<Paso> &plan);
 
-
   /**
- * @brief Convierte un plan de acciones en una lista de casillas para
- *        su visualización en el mapa gráfico.
- * @param st    Estado de partida.
- * @param plan  Lista de acciones del plan.
- */
+   * @brief Convierte un plan de acciones en una lista de casillas para
+   *        su visualización en el mapa gráfico.
+   * @param st    Estado de partida.
+   * @param plan  Lista de acciones del plan.
+   */
   void VisualizaPlan(const ubicacion &st, const list<Action> &plan);
 
 private:
   // =========================================================================
   // VARIABLES DE ESTADO (PUEDEN SER EXTENDIDAS POR EL ALUMNO)
   // =========================================================================
-
-  
+  Action last_action;
+  bool tiene_zapatillas;
+  vector<vector<int>> mapaVisitas;
+  int ultimaFila, ultimaCol;
+  int ultimaPosF, ultimaPosC;
+  int turnos_sin_avanzar;
+  int giros_consecutivos;
+  int plan_escape;
+  bool mano_derecha;
 };
 
 #endif
