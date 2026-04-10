@@ -250,11 +250,9 @@ int ElegirMovimientoNivel0I(const Sensores &sensores,
     int score = 0;
 
     // Preferir menos visitadas
-    score -= 10 * mapaVisitas[p.first][p.second];
-
-    // Penalizar volver justo atrás
+    score -= 25 * mapaVisitas[p.first][p.second];
     if (p.first == ultimaFila && p.second == ultimaCol)
-      score -= 50;
+        score -= 200;
 
     return score;
   };
@@ -314,6 +312,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   Action accion = IDLE;
 
   ActualizarMapa(sensores);
+  mapaVisitas[sensores.posF][sensores.posC]++;
 
   if (sensores.superficie[0] == 'D')
     tiene_zapatillas = true;
@@ -331,78 +330,28 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
                             sensores.cota[3] - sensores.cota[0],
                             tiene_zapatillas);
 
-  // El técnico bloquea
-  if (sensores.agentes[1] == 't')
-    i = 'P';
-  if (sensores.agentes[2] == 't')
-    c = 'P';
-  if (sensores.agentes[3] == 't')
-    d = 'P';
+  if (sensores.agentes[1] == 't') i = 'P';
+  if (sensores.agentes[2] == 't') c = 'P';
+  if (sensores.agentes[3] == 't') d = 'P';
 
-  bool izq = EsCaminoNivel0I(i);
-  bool cen = EsCaminoNivel0I(c);
-  bool der = EsCaminoNivel0I(d);
-
-  // -------------------------------------------------
-  // Actualizar contador de giros consecutivos
-  // -------------------------------------------------
   bool mismaPos = (sensores.posF == ultimaPosF && sensores.posC == ultimaPosC);
 
-  if (!mismaPos)
-    giros_consecutivos = 0;
+  int decision = ElegirMovimientoNivel0I(sensores, i, c, d,
+                                         mapaVisitas,
+                                         ultimaFila, ultimaCol,
+                                         mano_derecha);
 
-  // -------------------------------------------------
-  // Prioridad absoluta a U
-  // -------------------------------------------------
-  if (c == 'U')
-    accion = WALK;
-  else if (mano_derecha && d == 'U')
-    accion = TURN_SR;
-  else if (!mano_derecha && i == 'U')
-    accion = TURN_SL;
-  else if (d == 'U')
-    accion = TURN_SR;
-  else if (i == 'U')
-    accion = TURN_SL;
-
-  // -------------------------------------------------
-  // Prioridad a D si aún no la tengo
-  // -------------------------------------------------
-  else if (!tiene_zapatillas && c == 'D')
-    accion = WALK;
-  else if (!tiene_zapatillas && mano_derecha && d == 'D')
-    accion = TURN_SR;
-  else if (!tiene_zapatillas && !mano_derecha && i == 'D')
-    accion = TURN_SL;
-  else if (!tiene_zapatillas && d == 'D')
-    accion = TURN_SR;
-  else if (!tiene_zapatillas && i == 'D')
-    accion = TURN_SL;
-
-  // -------------------------------------------------
-  // Movimiento normal con giro fijo
-  // Primero avanzar si puedo; si no, girar en mi sentido
-  // -------------------------------------------------
-  else if (cen)
-    accion = WALK;
-  else if (mano_derecha && der)
-    accion = TURN_SR;
-  else if (!mano_derecha && izq)
-    accion = TURN_SL;
-  else if (der)
-    accion = TURN_SR;
-  else if (izq)
-    accion = TURN_SL;
-  else
+  switch (decision)
   {
-    // No hay salida visible: sigo girando en el mismo sentido
-    accion = mano_derecha ? TURN_SR : TURN_SL;
+    case 2: accion = WALK; break;
+    case 1: accion = TURN_SL; break;
+    case 3: accion = TURN_SR; break;
+    default:
+      accion = mano_derecha ? TURN_SR : TURN_SL;
+      break;
   }
 
-  // -------------------------------------------------
-  // Control de bucle:
-  // si lleva 7 giros seguidos sin avanzar, rompo el patrón
-  // -------------------------------------------------
+  // Control de bucle
   if (mismaPos)
   {
     if (accion == TURN_SR || accion == TURN_SL)
@@ -420,6 +369,14 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     accion = mano_derecha ? TURN_SL : TURN_SR;
     giros_consecutivos = 0;
   }
+
+  // Guardar casilla anterior solo si voy a avanzar
+  if (accion == WALK)
+  {
+    ultimaFila = sensores.posF;
+    ultimaCol = sensores.posC;
+  }
+
   last_action = accion;
   ultimaPosF = sensores.posF;
   ultimaPosC = sensores.posC;

@@ -184,12 +184,65 @@ bool EsCaminoNivel0T(char x)
   return x == 'C' || x == 'D' || x == 'U';
 }
 
+int ElegirMovimientoNivel0T(const Sensores &sensores,
+                            char i, char c, char d,
+                            const vector<vector<int>> &mapaVisitas,
+                            int ultimaFila, int ultimaCol,
+                            bool mano_derecha)
+{
+  if (c == 'U') return 2;
+  if (!mano_derecha && i == 'U') return 1;
+  if (mano_derecha && d == 'U') return 3;
+  if (i == 'U') return 1;
+  if (d == 'U') return 3;
+
+  if (c == 'D') return 2;
+  if (!mano_derecha && i == 'D') return 1;
+  if (mano_derecha && d == 'D') return 3;
+  if (i == 'D') return 1;
+  if (d == 'D') return 3;
+
+  pair<int,int> pi = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 1);
+  pair<int,int> pc = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 2);
+  pair<int,int> pd = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 3);
+
+  const int INF_NEG = -1000000;
+
+  auto puntuar = [&](char casilla, pair<int,int> p) {
+    if (!(casilla == 'C' || casilla == 'D' || casilla == 'U')) return INF_NEG;
+
+    int score = 0;
+    score -= 25 * mapaVisitas[p.first][p.second];
+
+    if (p.first == ultimaFila && p.second == ultimaCol)
+        score -= 200;
+
+    return score;
+  };
+
+  int scoreI = puntuar(i, pi);
+  int scoreC = puntuar(c, pc);
+  int scoreD = puntuar(d, pd);
+
+  if (scoreC >= scoreI && scoreC >= scoreD && scoreC > INF_NEG) return 2;
+
+  if (!mano_derecha) {
+    if (scoreI >= scoreD && scoreI > INF_NEG) return 1;
+    if (scoreD > INF_NEG) return 3;
+  } else {
+    if (scoreD >= scoreI && scoreD > INF_NEG) return 3;
+    if (scoreI > INF_NEG) return 1;
+  }
+
+  return 0;
+}
 // Niveles del técnico
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
 {
   Action accion = IDLE;
 
   ActualizarMapa(sensores);
+  mapaVisitas[sensores.posF][sensores.posC]++;
 
   if (sensores.superficie[0] == 'D')
     tiene_zapatillas = true;
@@ -209,47 +262,27 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
                             sensores.cota[3] - sensores.cota[0],
                             tiene_zapatillas);
 
-  // El ingeniero bloquea
-  if (sensores.agentes[1] == 'i')
-    i = 'P';
-  if (sensores.agentes[2] == 'i')
-    c = 'P';
-  if (sensores.agentes[3] == 'i')
-    d = 'P';
-
-  bool izq = EsCaminoNivel0T(i);
-  bool cen = EsCaminoNivel0T(c);
-  bool der = EsCaminoNivel0T(d);
+  if (sensores.agentes[1] == 'i') i = 'P';
+  if (sensores.agentes[2] == 'i') c = 'P';
+  if (sensores.agentes[3] == 'i') d = 'P';
 
   bool mismaPos = (sensores.posF == ultimaPosF && sensores.posC == ultimaPosC);
 
-  // Prioridad a U
-  if (c == 'U')
-    accion = WALK;
-  else if (i == 'U')
-    accion = TURN_SL;
-  else if (d == 'U')
-    accion = TURN_SR;
+  int decision = ElegirMovimientoNivel0T(sensores, i, c, d,
+                                         mapaVisitas,
+                                         ultimaFila, ultimaCol,
+                                         mano_derecha);
 
-  // Prioridad a D
-  else if (c == 'D')
-    accion = WALK;
-  else if (i == 'D')
-    accion = TURN_SL;
-  else if (d == 'D')
-    accion = TURN_SR;
+  switch (decision)
+  {
+    case 2: accion = WALK; break;
+    case 1: accion = TURN_SL; break;
+    case 3: accion = TURN_SR; break;
+    default:
+      accion = mano_derecha ? TURN_SR : TURN_SL;
+      break;
+  }
 
-  // Sentido fijo del técnico: izquierda
-  else if (cen)
-    accion = WALK;
-  else if (izq)
-    accion = TURN_SL;
-  else if (der)
-    accion = TURN_SR;
-  else
-    accion = TURN_SL;
-
-  // Control de bucle
   if (mismaPos)
   {
     if (accion == TURN_SR || accion == TURN_SL)
@@ -264,8 +297,14 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
 
   if (giros_consecutivos >= 7)
   {
-    accion = TURN_SR; // romper bucle una vez
+    accion = mano_derecha ? TURN_SL : TURN_SR;
     giros_consecutivos = 0;
+  }
+
+  if (accion == WALK)
+  {
+    ultimaFila = sensores.posF;
+    ultimaCol = sensores.posC;
   }
 
   last_action = accion;
@@ -273,7 +312,6 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
   ultimaPosC = sensores.posC;
   return accion;
 }
-
 /**
  * @brief Comprueba si una celda es de tipo camino transitable.
  * @param c Carácter que representa el tipo de superficie.
