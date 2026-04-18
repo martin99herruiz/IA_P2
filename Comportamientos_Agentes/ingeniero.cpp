@@ -393,7 +393,9 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
 {
   Action accion = IDLE;
 
-  // Fase 1: actualización del mundo / memoria
+  // =========================================================
+  // 1. Fase de observación / actualización
+  // =========================================================
   ActualizarMapa(sensores);
   mapaVisitas[sensores.posF][sensores.posC]++;
 
@@ -409,18 +411,50 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     return IDLE;
   }
 
-  // Filtrar por viabilidad en altura
-  char i = ViablePorAlturaI(sensores.superficie[1],
-                            sensores.cota[1] - sensores.cota[0],
-                            tiene_zapatillas);
+  // =========================================================
+  // 2. Construcción de las 3 opciones inmediatas
+  // =========================================================
+  pair<int, int> pi = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 1);
+  pair<int, int> pc = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 2);
+  pair<int, int> pd = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 3);
 
-  char c = ViablePorAlturaI(sensores.superficie[2],
-                            sensores.cota[2] - sensores.cota[0],
-                            tiene_zapatillas);
+  auto enRangoMapa = [&](pair<int, int> p)
+  {
+    return p.first >= 0 && p.first < (int)mapaResultado.size() &&
+           p.second >= 0 && p.second < (int)mapaResultado[0].size();
+  };
 
-  char d = ViablePorAlturaI(sensores.superficie[3],
-                            sensores.cota[3] - sensores.cota[0],
-                            tiene_zapatillas);
+  auto viableLateral = [&](pair<int, int> p, char casillaSensor, int idxSensor)
+  {
+    if (!enRangoMapa(p))
+      return 'P';
+
+    if (!EsCasillaTransitableLevel0(p.first, p.second, tiene_zapatillas))
+      return 'P';
+
+    int dif = sensores.cota[idxSensor] - sensores.cota[0];
+    if ((!tiene_zapatillas && abs(dif) > 1) || (tiene_zapatillas && abs(dif) > 2))
+      return 'P';
+
+    return casillaSensor;
+  };
+
+  // Centro: usar métodos del esqueleto
+  ubicacion actual;
+  actual.f = sensores.posF;
+  actual.c = sensores.posC;
+  actual.brujula = sensores.rumbo;
+
+  char c = 'P';
+  if (EsAccesiblePorAltura(actual, tiene_zapatillas) &&
+      enRangoMapa(pc) &&
+      EsCasillaTransitableLevel0(pc.first, pc.second, tiene_zapatillas))
+  {
+    c = sensores.superficie[2];
+  }
+
+  char i = viableLateral(pi, sensores.superficie[1], 1);
+  char d = viableLateral(pd, sensores.superficie[3], 3);
 
   // Casillas ocupadas por el Técnico = no disponibles
   if (sensores.agentes[1] == 't')
@@ -430,7 +464,9 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   if (sensores.agentes[3] == 't')
     d = 'P';
 
-  // Prioridad absoluta a U visible y viable
+  // =========================================================
+  // 3. Prioridad directa a una U visible y viable
+  // =========================================================
   if (c == 'U')
     accion = WALK;
   else if (i == 'U')
@@ -439,15 +475,14 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     accion = TURN_SR;
   else
   {
-    // Resolver conflictos: el Ingeniero actúa primero y debe evitarlos
+    // =========================================================
+    // 4. Resolver interacciones con el Técnico
+    // =========================================================
     bool conflictoFrontal = (sensores.agentes[2] == 't');
     bool choqueTrasAvanzar = (sensores.choque && last_action == WALK);
 
     if (conflictoFrontal || choqueTrasAvanzar)
     {
-      pair<int, int> pi = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 1);
-      pair<int, int> pd = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 3);
-
       int vi = 999999, vd = 999999;
       unsigned char mi = 'P', md = 'P';
 
@@ -520,7 +555,9 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     }
   }
 
-  // Guardar casilla anterior solo si avanza
+  // =========================================================
+  // 5. Actualización de memoria
+  // =========================================================
   if (accion == WALK)
   {
     ultimaFila = sensores.posF;
@@ -532,7 +569,6 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   ultimaPosC = sensores.posC;
   return accion;
 }
-
 /**
  * @brief Comprueba si una celda es de tipo camino transitable.
  * @param c Carácter que representa el tipo de superficie.
