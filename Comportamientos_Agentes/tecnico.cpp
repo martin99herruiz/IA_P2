@@ -208,14 +208,27 @@ int ElegirMovimientoNivel0T(const Sensores &sensores,
 
   const int INF_NEG = -1000000;
 
+  auto enRango = [&](pair<int,int> p) {
+    return p.first >= 0 && p.first < (int)mapaVisitas.size() &&
+           p.second >= 0 && p.second < (int)mapaVisitas[0].size();
+  };
+
   auto puntuar = [&](char casilla, pair<int,int> p) {
     if (!(casilla == 'C' || casilla == 'D' || casilla == 'U')) return INF_NEG;
+    if (!enRango(p)) return INF_NEG;
 
+    int visitas = mapaVisitas[p.first][p.second];
     int score = 0;
-    score -= 25 * mapaVisitas[p.first][p.second];
 
+    // Penalización moderada
+    score -= 35 * visitas;
+
+    if (visitas >= 3) score -= 60;
+    if (visitas >= 5) score -= 120;
+
+    // Penalización por volver justo atrás
     if (p.first == ultimaFila && p.second == ultimaCol)
-        score -= 200;
+      score -= 250;
 
     return score;
   };
@@ -224,18 +237,49 @@ int ElegirMovimientoNivel0T(const Sensores &sensores,
   int scoreC = puntuar(c, pc);
   int scoreD = puntuar(d, pd);
 
-  if (scoreC >= scoreI && scoreC >= scoreD && scoreC > INF_NEG) return 2;
+  // Si centro es estrictamente mejor
+  if (scoreC > scoreI && scoreC > scoreD && scoreC > INF_NEG) return 2;
 
-  if (!mano_derecha) {
-    if (scoreI >= scoreD && scoreI > INF_NEG) return 1;
-    if (scoreD > INF_NEG) return 3;
-  } else {
-    if (scoreD >= scoreI && scoreD > INF_NEG) return 3;
-    if (scoreI > INF_NEG) return 1;
+  // Si centro empata, permitir avanzar si no es volver atrás
+  if (scoreC == scoreI && scoreC > scoreD && scoreC > INF_NEG) {
+    if (!(pc.first == ultimaFila && pc.second == ultimaCol)) return 2;
   }
+
+  if (scoreC == scoreD && scoreC > scoreI && scoreC > INF_NEG) {
+    if (!(pc.first == ultimaFila && pc.second == ultimaCol)) return 2;
+  }
+
+  if (scoreC == scoreI && scoreC == scoreD && scoreC > INF_NEG) {
+    if (!(pc.first == ultimaFila && pc.second == ultimaCol)) return 2;
+  }
+
+  // Empate izquierda/derecha -> menos visitada
+  if (scoreI == scoreD && scoreI > INF_NEG) {
+    int visI = enRango(pi) ? mapaVisitas[pi.first][pi.second] : 999999;
+    int visD = enRango(pd) ? mapaVisitas[pd.first][pd.second] : 999999;
+
+    if (visI < visD) return 1;
+    if (visD < visI) return 3;
+
+    return mano_derecha ? 3 : 1;
+  }
+
+  if (mano_derecha) {
+    if (scoreD > scoreI && scoreD > INF_NEG) return 3;
+    if (scoreI > INF_NEG) return 1;
+  } else {
+    if (scoreI > scoreD && scoreI > INF_NEG) return 1;
+    if (scoreD > INF_NEG) return 3;
+  }
+
+  // Último recurso: si centro sigue siendo viable, usarlo
+  if (scoreC > INF_NEG) return 2;
 
   return 0;
 }
+
+
+
 // Niveles del técnico
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
 {

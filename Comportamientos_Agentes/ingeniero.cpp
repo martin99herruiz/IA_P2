@@ -244,15 +244,29 @@ int ElegirMovimientoNivel0I(const Sensores &sensores,
 
   const int INF_NEG = -1000000;
 
+  auto enRango = [&](pair<int,int> p) {
+    return p.first >= 0 && p.first < (int)mapaVisitas.size() &&
+           p.second >= 0 && p.second < (int)mapaVisitas[0].size();
+  };
+
   auto puntuar = [&](char casilla, pair<int,int> p) {
     if (!(casilla == 'C' || casilla == 'D' || casilla == 'U')) return INF_NEG;
+    if (!enRango(p)) return INF_NEG;
 
+    int visitas = mapaVisitas[p.first][p.second];
     int score = 0;
 
-    // Preferir menos visitadas
-    score -= 25 * mapaVisitas[p.first][p.second];
+    // Penalización base fuerte por revisitar
+    score -= 80 * visitas;
+
+    // Penalización extra creciente si la casilla está muy repetida
+    if (visitas >= 2) score -= 100;
+    if (visitas >= 4) score -= 200;
+    if (visitas >= 6) score -= 400;
+
+    // Penalización muy fuerte por volver atrás
     if (p.first == ultimaFila && p.second == ultimaCol)
-        score -= 200;
+      score -= 600;
 
     return score;
   };
@@ -261,18 +275,46 @@ int ElegirMovimientoNivel0I(const Sensores &sensores,
   int scoreC = puntuar(c, pc);
   int scoreD = puntuar(d, pd);
 
-  // En empate, mantener sesgo
-  if (scoreC >= scoreI && scoreC >= scoreD && scoreC > INF_NEG) return 2;
+  // Si el centro es estrictamente mejor
+  if (scoreC > scoreI && scoreC > scoreD && scoreC > INF_NEG) return 2;
+
+  // Si centro empata con otros, solo cogerlo si no es volver atrás
+  if (scoreC == scoreI && scoreC > scoreD && scoreC > INF_NEG) {
+    if (!(pc.first == ultimaFila && pc.second == ultimaCol)) return 2;
+  }
+
+  if (scoreC == scoreD && scoreC > scoreI && scoreC > INF_NEG) {
+    if (!(pc.first == ultimaFila && pc.second == ultimaCol)) return 2;
+  }
+
+  if (scoreC == scoreI && scoreC == scoreD && scoreC > INF_NEG) {
+    if (!(pc.first == ultimaFila && pc.second == ultimaCol)) return 2;
+  }
+
+  // Desempate izquierda/derecha por menos visitas
+  if (scoreI == scoreD && scoreI > INF_NEG) {
+    int visI = enRango(pi) ? mapaVisitas[pi.first][pi.second] : 999999;
+    int visD = enRango(pd) ? mapaVisitas[pd.first][pd.second] : 999999;
+
+    if (visI < visD) return 1;
+    if (visD < visI) return 3;
+
+    return mano_derecha ? 3 : 1;
+  }
+
   if (mano_derecha) {
-    if (scoreD >= scoreI && scoreD > INF_NEG) return 3;
+    if (scoreD > scoreI && scoreD > INF_NEG) return 3;
     if (scoreI > INF_NEG) return 1;
   } else {
-    if (scoreI >= scoreD && scoreI > INF_NEG) return 1;
+    if (scoreI > scoreD && scoreI > INF_NEG) return 1;
     if (scoreD > INF_NEG) return 3;
   }
 
+  if (scoreC > INF_NEG) return 2;
+
   return 0;
 }
+
 Action ComportamientoIngeniero::think(Sensores sensores)
 {
   Action accion = IDLE;
@@ -318,7 +360,14 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     tiene_zapatillas = true;
 
   if (sensores.superficie[0] == 'U')
+  {
+    // Si otro agente está cerca, me aparto
+    if (sensores.agentes[1] != '_' || sensores.agentes[2] != '_' || sensores.agentes[3] != '_')
+    {
+      return mano_derecha ? TURN_SR : TURN_SL;
+    }
     return IDLE;
+  }
 
   char i = ViablePorAlturaI(sensores.superficie[1],
                             sensores.cota[1] - sensores.cota[0],
