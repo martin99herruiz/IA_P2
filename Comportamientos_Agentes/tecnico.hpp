@@ -41,7 +41,7 @@ public:
     ultimaPosC = -1;
     turnos_sin_avanzar = 0;
     mapaVisitas = vector<vector<int>>(size, vector<int>(size, 0));
-    mano_derecha = true; // Técnico: mano derecha
+    mano_derecha = false; // Técnico: mano derecha
     plan_escape = 0;
     giros_consecutivos = 0;
   }

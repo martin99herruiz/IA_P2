@@ -209,110 +209,106 @@ int ElegirMovimientoNivel0T(const Sensores &sensores,
   pair<int, int> pc = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 2);
   pair<int, int> pd = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 3);
 
+  const int INF_NEG = -1000000;
+
   auto enRango = [&](pair<int, int> p)
   {
     return p.first >= 0 && p.first < (int)mapaVisitas.size() &&
            p.second >= 0 && p.second < (int)mapaVisitas[0].size();
   };
 
-  auto visitas = [&](pair<int, int> p)
+  auto puntuar = [&](char casilla, pair<int, int> p, bool esCentro)
   {
+    if (!(casilla == 'C' || casilla == 'D' || casilla == 'U'))
+      return INF_NEG;
     if (!enRango(p))
-      return 999999;
-    return mapaVisitas[p.first][p.second];
+      return INF_NEG;
+
+    int vis = mapaVisitas[p.first][p.second];
+    int score = 0;
+
+    // Penalización fuerte por revisitar
+    score -= 60 * vis;
+
+    if (vis >= 2) score -= 100;
+    if (vis >= 4) score -= 200;
+    if (vis >= 6) score -= 400;
+
+    // Penalización MUY fuerte por volver justo atrás
+    if (p.first == ultimaFila && p.second == ultimaCol)
+      score -= 500;
+
+    // Bonus por seguir recto
+    if (esCentro)
+      score += 40;
+
+    // Penalizar un poco las vibraciones en diagonal
+    if (!esCentro && (sensores.rumbo % 2 != 0))
+      score -= 5;
+
+    // U delante sigue siendo muy atractiva, pero no infinita
+    if (casilla == 'U')
+      score += esCentro ? 300 : 180;
+
+    // D es útil, pero menos que U
+    if (casilla == 'D')
+      score += 80;
+
+    return score;
   };
 
-  auto penalizaAtras = [&](pair<int, int> p)
-  {
-    return (p.first == ultimaFila && p.second == ultimaCol);
-  };
+  int scoreI = puntuar(i, pi, false);
+  int scoreC = puntuar(c, pc, true);
+  int scoreD = puntuar(d, pd, false);
 
-  // Prioridad absoluta a U
-  if (c == 'U')
+  // Si el centro es claramente mejor, avanzar
+  if (scoreC > scoreI && scoreC > scoreD && scoreC > INF_NEG)
     return 2;
-  if (!mano_derecha && i == 'U')
-    return 1;
-  if (mano_derecha && d == 'U')
-    return 3;
-  if (i == 'U')
-    return 1;
-  if (d == 'U')
-    return 3;
 
-  // Entre caminos, elegir el menos visitado
-  vector<pair<int, int>> opcionesC;
-  if (i == 'C')
-    opcionesC.push_back({1, visitas(pi) + (penalizaAtras(pi) ? 100 : 0)});
-  if (c == 'C')
-    opcionesC.push_back({2, visitas(pc) + (penalizaAtras(pc) ? 100 : 0)});
-  if (d == 'C')
-    opcionesC.push_back({3, visitas(pd) + (penalizaAtras(pd) ? 100 : 0)});
-
-  if (!opcionesC.empty())
+  // Empates con el centro: favorecer avanzar si no es volver atrás
+  if (scoreC == scoreI && scoreC > scoreD && scoreC > INF_NEG)
   {
-    int mejorDir = opcionesC[0].first;
-    int mejorCoste = opcionesC[0].second;
-
-    for (int k = 1; k < (int)opcionesC.size(); k++)
-    {
-      if (opcionesC[k].second < mejorCoste)
-      {
-        mejorCoste = opcionesC[k].second;
-        mejorDir = opcionesC[k].first;
-      }
-      else if (opcionesC[k].second == mejorCoste)
-      {
-        // desempate: favorecer seguir recto
-        if (opcionesC[k].first == 2)
-          mejorDir = 2;
-        else if (mejorDir != 2)
-        {
-          if (mano_derecha && opcionesC[k].first == 3)
-            mejorDir = 3;
-          if (!mano_derecha && opcionesC[k].first == 1)
-            mejorDir = 1;
-        }
-      }
-    }
-    return mejorDir;
+    if (!(pc.first == ultimaFila && pc.second == ultimaCol))
+      return 2;
   }
 
-  // Luego zapatillas
-  vector<pair<int, int>> opcionesD;
-  if (i == 'D')
-    opcionesD.push_back({1, visitas(pi) + (penalizaAtras(pi) ? 100 : 0)});
-  if (c == 'D')
-    opcionesD.push_back({2, visitas(pc) + (penalizaAtras(pc) ? 100 : 0)});
-  if (d == 'D')
-    opcionesD.push_back({3, visitas(pd) + (penalizaAtras(pd) ? 100 : 0)});
-
-  if (!opcionesD.empty())
+  if (scoreC == scoreD && scoreC > scoreI && scoreC > INF_NEG)
   {
-    int mejorDir = opcionesD[0].first;
-    int mejorCoste = opcionesD[0].second;
-
-    for (int k = 1; k < (int)opcionesD.size(); k++)
-    {
-      if (opcionesD[k].second < mejorCoste)
-      {
-        mejorCoste = opcionesD[k].second;
-        mejorDir = opcionesD[k].first;
-      }
-      else if (opcionesD[k].second == mejorCoste)
-      {
-        if (opcionesD[k].first == 2)
-          mejorDir = 2;
-        else if (mejorDir != 2)
-        {
-          if (mano_derecha && opcionesD[k].first == 3)
-            mejorDir = 3;
-          if (!mano_derecha && opcionesD[k].first == 1)
-            mejorDir = 1;
-        }
-      }
-    }
-    return mejorDir;
+    if (!(pc.first == ultimaFila && pc.second == ultimaCol))
+      return 2;
   }
+
+  if (scoreC == scoreI && scoreC == scoreD && scoreC > INF_NEG)
+  {
+    if (!(pc.first == ultimaFila && pc.second == ultimaCol))
+      return 2;
+  }
+
+  // Desempate izquierda/derecha por menos visitas
+  if (scoreI == scoreD && scoreI > INF_NEG)
+  {
+    int visI = enRango(pi) ? mapaVisitas[pi.first][pi.second] : 999999;
+    int visD = enRango(pd) ? mapaVisitas[pd.first][pd.second] : 999999;
+
+    if (visI < visD) return 1;
+    if (visD < visI) return 3;
+
+    return mano_derecha ? 3 : 1;
+  }
+
+  if (mano_derecha)
+  {
+    if (scoreD > scoreI && scoreD > INF_NEG) return 3;
+    if (scoreI > INF_NEG) return 1;
+  }
+  else
+  {
+    if (scoreI > scoreD && scoreI > INF_NEG) return 1;
+    if (scoreD > INF_NEG) return 3;
+  }
+
+  if (scoreC > INF_NEG)
+    return 2;
 
   return 0;
 }
@@ -330,8 +326,39 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
 
   if (sensores.superficie[0] == 'D')
     tiene_zapatillas = true;
+  // Detectar si el técnico lleva varios turnos sin avanzar
+  bool mismaPosicion = (sensores.posF == ultimaPosF && sensores.posC == ultimaPosC);
 
-  // Si ya estoy en una planta, objetivo cumplido
+  if (mismaPosicion && last_action != IDLE)
+    turnos_sin_avanzar++;
+  else
+    turnos_sin_avanzar = 0;
+
+  // Si chocó al avanzar o lleva demasiado tiempo atascado, activar escape
+  if ((sensores.choque && last_action == WALK) || turnos_sin_avanzar >= 6)
+  {
+    plan_escape = 2;
+    turnos_sin_avanzar = 0;
+  }
+
+  // Modo escape: durante unos turnos rompe el patrón local
+  if (plan_escape > 0)
+  {
+    plan_escape--;
+
+    // Como el técnico usa mano izquierda, rompe el atasco girando a la izquierda
+    accion = TURN_SL;
+
+    last_action = accion;
+    ultimaPosF = sensores.posF;
+    ultimaPosC = sensores.posC;
+    return accion;
+  }
+
+  // Si llegué a planta, me quedo quieto
+  // if (sensores.superficie[0] == 'U')
+  //  accion = IDLE;
+  
   if (sensores.superficie[0] == 'U')
   {
     last_action = IDLE;
@@ -339,22 +366,24 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
     ultimaPosC = sensores.posC;
     return IDLE;
   }
-
   // =========================================================
   // 2. Construcción de las 3 opciones inmediatas (izq-centro-der)
   //    usando más los métodos del profesor
   // =========================================================
-  pair<int,int> pi = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 1);
-  pair<int,int> pc = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 2);
-  pair<int,int> pd = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 3);
+  pair<int, int> pi = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 1);
+  pair<int, int> pc = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 2);
+  pair<int, int> pd = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 3);
 
-  auto enRangoMapa = [&](pair<int,int> p) {
+  auto enRangoMapa = [&](pair<int, int> p)
+  {
     return p.first >= 0 && p.first < (int)mapaResultado.size() &&
            p.second >= 0 && p.second < (int)mapaResultado[0].size();
   };
 
-  auto viableLateral = [&](pair<int,int> p, char casillaSensor, int idxSensor) {
-    if (!enRangoMapa(p)) return 'P';
+  auto viableLateral = [&](pair<int, int> p, char casillaSensor, int idxSensor)
+  {
+    if (!enRangoMapa(p))
+      return 'P';
 
     // El método del profesor comprueba tránsito en nivel 0
     if (!EsCasillaTransitableLevel0(p.first, p.second, tiene_zapatillas))
@@ -386,29 +415,36 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
   char i = viableLateral(pi, sensores.superficie[1], 1);
   char d = viableLateral(pd, sensores.superficie[3], 3);
 
-  // Casillas ocupadas por el Ingeniero = no disponibles
-  if (sensores.agentes[1] == 'i') i = 'P';
-  if (sensores.agentes[2] == 'i') c = 'P';
-  if (sensores.agentes[3] == 'i') d = 'P';
-
   // =========================================================
   // 3. Reglas reactivas de conflicto
   // =========================================================
 
-  // Cesión mínima al Ingeniero: si está justo delante, no compito
-  if (sensores.agentes[2] == 'i')
+  bool ingenieroIzq = (sensores.agentes[1] == 'i');
+  bool ingenieroCen = (sensores.agentes[2] == 'i');
+  bool ingenieroDer = (sensores.agentes[3] == 'i');
+
+  if (ingenieroIzq)
+    i = 'P';
+  if (ingenieroCen)
+    c = 'P';
+  if (ingenieroDer)
+    d = 'P';
+
+  bool ingenieroCerca = ingenieroIzq || ingenieroCen || ingenieroDer;
+
+  if (ingenieroCerca)
   {
-    accion = mano_derecha ? TURN_SR : TURN_SL;
-    last_action = accion;
-    ultimaPosF = sensores.posF;
-    ultimaPosC = sensores.posC;
-    return accion;
+    if (i == 'U')
+      i = 'P';
+    if (c == 'U')
+      c = 'P';
+    if (d == 'U')
+      d = 'P';
   }
 
-  // Si choqué intentando avanzar, no insisto
   if (sensores.choque && last_action == WALK)
   {
-    accion = mano_derecha ? TURN_SL : TURN_SR;
+    accion = mano_derecha ? TURN_SR : TURN_SL;
     last_action = accion;
     ultimaPosF = sensores.posF;
     ultimaPosC = sensores.posC;
@@ -437,29 +473,29 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
 
     switch (decision)
     {
-      case 2:
-        accion = WALK;
-        break;
-      case 1:
+    case 2:
+      accion = WALK;
+      break;
+    case 1:
+      accion = TURN_SL;
+      break;
+    case 3:
+      accion = TURN_SR;
+      break;
+    default:
+    {
+      // La U lejana solo orienta si no hay mejor opción local
+      int posU = VeoULejoT(sensores);
+
+      if (posU == 1)
         accion = TURN_SL;
-        break;
-      case 3:
+      else if (posU == 3)
         accion = TURN_SR;
-        break;
-      default:
-      {
-        // La U lejana solo orienta si no hay mejor opción local
-        int posU = VeoULejoT(sensores);
+      else
+        accion = mano_derecha ? TURN_SR : TURN_SL;
 
-        if (posU == 1)
-          accion = TURN_SL;
-        else if (posU == 3)
-          accion = TURN_SR;
-        else
-          accion = mano_derecha ? TURN_SR : TURN_SL;
-
-        break;
-      }
+      break;
+    }
     }
 
     // Antibucle simple
