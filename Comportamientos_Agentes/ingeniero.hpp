@@ -24,19 +24,18 @@ public:
    */
   ComportamientoIngeniero(unsigned int size = 0) : Comportamiento(size)
   {
-    // Inicializar Variables de Estado
     last_action = IDLE;
     tiene_zapatillas = false;
     giros_consecutivos = 0;
-    mapaVisitas = vector<vector<int>>(size, vector<int>(size, 0));
+    mapaVisitas = std::vector<std::vector<int>>(size, std::vector<int>(size, 0));
     ultimaFila = -1;
     ultimaCol = -1;
     turnos_sin_avanzar = 0;
     ultimaPosF = -1;
     ultimaPosC = -1;
-
     plan_escape = 0;
-    mano_derecha = true; // Ingeniero: mano derecha
+    mano_derecha = true;
+    hayPlan = false;
   }
 
   /**
@@ -45,25 +44,32 @@ public:
    * @param mapaC Mapa de cotas conocido
    */
   ComportamientoIngeniero(std::vector<std::vector<unsigned char>> mapaR,
-                          std::vector<std::vector<unsigned char>> mapaC) : Comportamiento(mapaR, mapaC)
+                          std::vector<std::vector<unsigned char>> mapaC)
+      : Comportamiento(mapaR, mapaC)
   {
-    // Inicializar Variables de Estado
-    mapaVisitas = vector<vector<int>>(mapaR.size(), vector<int>(mapaR[0].size(), 0));
+    last_action = IDLE;
+    tiene_zapatillas = false;
+    giros_consecutivos = 0;
+    mapaVisitas = std::vector<std::vector<int>>(mapaR.size(), std::vector<int>(mapaR[0].size(), 0));
+    ultimaFila = -1;
+    ultimaCol = -1;
+    turnos_sin_avanzar = 0;
     ultimaPosF = -1;
     ultimaPosC = -1;
+    plan_escape = 0;
+    mano_derecha = true;
+    hayPlan = false;
   }
 
   ComportamientoIngeniero(const ComportamientoIngeniero &comport)
       : Comportamiento(comport) {}
+
   ~ComportamientoIngeniero() {}
 
   /**
    * @brief Bucle principal de decisión del agente.
-   * Estudia los sensores y decide la siguiente acción.
-   *
-   * EJEMPLO DE USO:
-   * Action accion = think(sensores);
-   * return accion; // El motor ejecutará esta acción
+   * @param sensores Datos actuales de sensores.
+   * @return Acción a realizar.
    */
   Action think(Sensores sensores);
 
@@ -76,55 +82,12 @@ public:
   // ÁREA DE IMPLEMENTACIÓN DEL ESTUDIANTE
   // =========================================================================
 
-  // Funciones específicas para cada nivel (para ser implementadas por el alumno)
-
-  /**
-   * @brief Implementación del Nivel 0.
-   * @param sensores Datos actuales de los sensores del agente.
-   * @return Acción a realizar.
-   */
   Action ComportamientoIngenieroNivel_0(Sensores sensores);
-
-  /**
-   * @brief Implementación del Nivel 1.
-   * @param sensores Datos actuales de los sensores del agente.
-   * @return Acción a realizar.
-   */
   Action ComportamientoIngenieroNivel_1(Sensores sensores);
-
-  /**
-   * @brief Implementación del Nivel 2.
-   * @param sensores Datos actuales de los sensores del agente.
-   * @return Acción a realizar.
-   */
   Action ComportamientoIngenieroNivel_2(Sensores sensores);
-
-  /**
-   * @brief Implementación del Nivel 3.
-   * @param sensores Datos actuales de los sensores del agente.
-   * @return Acción a realizar.
-   */
   Action ComportamientoIngenieroNivel_3(Sensores sensores);
-
-  /**
-   * @brief Implementación del Nivel 4.
-   * @param sensores Datos actuales de los sensores del agente.
-   * @return Acción a realizar.
-   */
   Action ComportamientoIngenieroNivel_4(Sensores sensores);
-
-  /**
-   * @brief Implementación del Nivel 5.
-   * @param sensores Datos actuales de los sensores del agente.
-   * @return Acción a realizar.
-   */
   Action ComportamientoIngenieroNivel_5(Sensores sensores);
-
-  /**
-   * @brief Implementación del Nivel 6.
-   * @param sensores Datos actuales de los sensores del agente.
-   * @return Acción a realizar.
-   */
   Action ComportamientoIngenieroNivel_6(Sensores sensores);
 
 protected:
@@ -132,75 +95,91 @@ protected:
   // FUNCIONES PROPORCIONADAS
   // =========================================================================
 
-  /**
-   * @brief Actualiza la información del mapa interno basándose en los sensores.
-   * IMPORTANTE: Esta función ya está implementada. Actualiza mapaResultado y mapaCotas
-   * con la información de los 16 sensores (casilla actual + 15 casillas alrededor).
-   */
   void ActualizarMapa(Sensores sensores);
-
-  /**
-   * @brief Comprueba si una casilla es transitable.
-   * @param f Fila de la casilla.
-   * @param c Columna de la casilla.
-   * @param tieneZapatillas Indica si el agente posee zapatillas.
-   * @return true si la casilla es transitable (no es muro ni precipicio).
-   */
   bool EsCasillaTransitableLevel0(int f, int c, bool tieneZapatillas);
-
-  /**
-   * @brief Comprueba si la casilla de delante es accesible por diferencia de altura.
-   * REGLAS: Desnivel máximo 1 sin zapatillas, 2 con zapatillas.
-   * @param actual Estado actual del agente (fila, columna, orientacion).
-   * @return true si el desnivel con la casilla de delante es admisible.
-   */
   bool EsAccesiblePorAltura(const ubicacion &actual, bool zap);
-
-  /**
-   * @brief Devuelve la posición (fila, columna) de la casilla que hay delante del agente.
-   * @param actual Estado actual del agente (fila, columna, orientacion).
-   * @return Estado con la fila y columna de la casilla de enfrente.
-   */
   ubicacion Delante(const ubicacion &actual) const;
-
   bool es_camino(unsigned char c) const;
 
-  /**
-   * @brief Imprime por consola la secuencia de acciones de un plan para un agente.
-   * @param plan  Lista de acciones del plan.
-   */
-  void PintaPlan(const list<Action> &plan);
-
-  /**
-   * @brief Imprime las coordenadas y operaciones de un plan de tubería.
-   * @param plan  Lista de pasos (fila, columna, operación).
-   */
-  void PintaPlan(const list<Paso> &plan);
-
-  /**
-   * @brief Convierte un plan de acciones en una lista de casillas para
-   *        su visualización en el mapa gráfico.
-   * @param st    Estado de partida.
-   * @param plan  Lista de acciones del plan.
-   */
-  void VisualizaPlan(const ubicacion &st, const list<Action> &plan);
-
-  /**
-   * @brief Convierte un plan de tubería en la lista de casillas usada
-   *        por el sistema de visualización.
-   * @param st    Estado de partida (no utilizado directamente).
-   * @param plan  Lista de pasos del plan de tubería.
-   */
-  void VisualizaRedTuberias(const list<Paso> &plan);
+  void PintaPlan(const std::list<Action> &plan);
+  void PintaPlan(const std::list<Paso> &plan);
+  void VisualizaPlan(const ubicacion &st, const std::list<Action> &plan);
+  void VisualizaRedTuberias(const std::list<Paso> &plan);
 
 private:
   // =========================================================================
-  // VARIABLES DE ESTADO (PUEDEN SER EXTENDIDAS POR EL ALUMNO)
+  // ESTRUCTURAS PARA BÚSQUEDA DEL NIVEL 2
   // =========================================================================
+
+  struct EstadoI
+  {
+    ubicacion site;
+    bool zapatillas = false;
+
+    bool operator==(const EstadoI &other) const
+    {
+      return site == other.site && zapatillas == other.zapatillas;
+    }
+
+    bool operator<(const EstadoI &other) const
+    {
+      if (site.f != other.site.f) return site.f < other.site.f;
+      if (site.c != other.site.c) return site.c < other.site.c;
+      if (site.brujula != other.site.brujula) return site.brujula < other.site.brujula;
+      return zapatillas < other.zapatillas;
+    }
+  };
+
+  struct NodoI
+  {
+    EstadoI estado;
+    std::list<Action> secuencia;
+
+    bool operator==(const NodoI &other) const
+    {
+      return estado == other.estado;
+    }
+
+    bool operator<(const NodoI &other) const
+    {
+      return estado < other.estado;
+    }
+  };
+
+  // =========================================================================
+  // FUNCIONES AUXILIARES DE BÚSQUEDA NIVEL 2
+  // =========================================================================
+
+  EstadoI NextCasillaIngeniero(const EstadoI &st);
+  EstadoI NextCasillaIngeniero2(const EstadoI &st);
+  bool EnRango(int f, int c, const vector<vector<unsigned char>> &m) const;
+
+  bool CasillaAccesibleIngeniero(const EstadoI &st,
+                                 const std::vector<std::vector<unsigned char>> &terreno,
+                                 const std::vector<std::vector<unsigned char>> &altura);
+
+  bool CasillaAccesibleJumpIngeniero(const EstadoI &st,
+                                     const std::vector<std::vector<unsigned char>> &terreno,
+                                     const std::vector<std::vector<unsigned char>> &altura);
+
+  EstadoI applyI(Action accion,
+                 const EstadoI &st,
+                 const std::vector<std::vector<unsigned char>> &terreno,
+                 const std::vector<std::vector<unsigned char>> &altura);
+
+  std::list<Action> B_Anchura_Ingeniero(const EstadoI &inicio,
+                                        const ubicacion &destino,
+                                        const std::vector<std::vector<unsigned char>> &terreno,
+                                        const std::vector<std::vector<unsigned char>> &altura);
+
+  // =========================================================================
+  // VARIABLES DE ESTADO
+  // =========================================================================
+
   Action last_action;
   bool tiene_zapatillas;
   int giros_consecutivos;
-  vector<vector<int>> mapaVisitas;
+  std::vector<std::vector<int>> mapaVisitas;
   int ultimaFila;
   int ultimaCol;
   int turnos_sin_avanzar;
@@ -208,6 +187,9 @@ private:
   int ultimaPosC;
   int plan_escape;
   bool mano_derecha;
+
+  std::list<Action> plan;
+  bool hayPlan;
 };
 
 #endif
