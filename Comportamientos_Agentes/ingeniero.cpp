@@ -723,7 +723,26 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_2(Sensores sensores
  */
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_3(Sensores sensores)
 {
-  return IDLE;
+// Si el técnico está justo delante, giro para no bloquear
+    if (sensores.agentes[2] == 't')
+        return TURN_SR;
+
+    // Si el técnico está en el cono cercano y tengo delante libre, avanzo para apartarme
+    ubicacion actual;
+    actual.f = sensores.posF;
+    actual.c = sensores.posC;
+    actual.brujula = sensores.rumbo;
+
+    ubicacion d = Delante(actual);
+
+    if (EsCasillaTransitable(d.f, d.c, tiene_zapatillas) &&
+        EsAccesiblePorAltura(actual) &&
+        mapaResultado[d.f][d.c] != 'P')
+    {
+        return WALK;
+    }
+
+    return TURN_SR;
 }
 
 /**
