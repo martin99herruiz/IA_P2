@@ -211,6 +211,7 @@ int VeoCasillaInteresanteI(char i, char c, char d, bool zap)
 
   return 0;
 }
+
 bool EsCaminoNivel0I(char x)
 {
   return x == 'C' || x == 'D' || x == 'U';
@@ -393,184 +394,15 @@ Action ComportamientoIngeniero::think(Sensores sensores)
 
 bool ComportamientoIngeniero::EnRango(int f, int c, const vector<vector<unsigned char>> &m) const
 {
-  Action accion = IDLE;
-
-  // =========================================================
-  // 1. Fase de observación / actualización
-  // =========================================================
-  ActualizarMapa(sensores);
-  mapaVisitas[sensores.posF][sensores.posC]++;
-
-  if (sensores.superficie[0] == 'D')
-    tiene_zapatillas = true;
-
-  // Si ya estoy en una planta, objetivo cumplido
-  if (sensores.superficie[0] == 'U')
-  {
-    last_action = IDLE;
-    ultimaPosF = sensores.posF;
-    ultimaPosC = sensores.posC;
-    return IDLE;
-  }
-
-  // =========================================================
-  // 2. Construcción de las 3 opciones inmediatas
-  // =========================================================
-  pair<int, int> pi = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 1);
-  pair<int, int> pc = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 2);
-  pair<int, int> pd = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 3);
-
-  auto enRangoMapa = [&](pair<int, int> p)
-  {
-    return p.first >= 0 && p.first < (int)mapaResultado.size() &&
-           p.second >= 0 && p.second < (int)mapaResultado[0].size();
-  };
-
-  auto viableLateral = [&](pair<int, int> p, char casillaSensor, int idxSensor)
-  {
-    if (!enRangoMapa(p))
-      return 'P';
-
-    if (!EsCasillaTransitableLevel0(p.first, p.second, tiene_zapatillas))
-      return 'P';
-
-    int dif = sensores.cota[idxSensor] - sensores.cota[0];
-    if ((!tiene_zapatillas && abs(dif) > 1) || (tiene_zapatillas && abs(dif) > 2))
-      return 'P';
-
-    return casillaSensor;
-  };
-
-  // Centro: usar métodos del esqueleto
-  ubicacion actual;
-  actual.f = sensores.posF;
-  actual.c = sensores.posC;
-  actual.brujula = sensores.rumbo;
-
-  char c = 'P';
-  if (EsAccesiblePorAltura(actual, tiene_zapatillas) &&
-      enRangoMapa(pc) &&
-      EsCasillaTransitableLevel0(pc.first, pc.second, tiene_zapatillas))
-  {
-    c = sensores.superficie[2];
-  }
-
-  char i = viableLateral(pi, sensores.superficie[1], 1);
-  char d = viableLateral(pd, sensores.superficie[3], 3);
-
-  // Casillas ocupadas por el Técnico = no disponibles
-  if (sensores.agentes[1] == 't')
-    i = 'P';
-  if (sensores.agentes[2] == 't')
-    c = 'P';
-  if (sensores.agentes[3] == 't')
-    d = 'P';
-
-  // =========================================================
-  // 3. Prioridad directa a una U visible y viable
-  // =========================================================
-  if (c == 'U')
-    accion = WALK;
-  else if (i == 'U')
-    accion = TURN_SL;
-  else if (d == 'U')
-    accion = TURN_SR;
-  else
-  {
-    // =========================================================
-    // 4. Resolver interacciones con el Técnico
-    // =========================================================
-    bool conflictoFrontal = (sensores.agentes[2] == 't');
-    bool choqueTrasAvanzar = (sensores.choque && last_action == WALK);
-
-    if (conflictoFrontal || choqueTrasAvanzar)
-    {
-      int vi = 999999, vd = 999999;
-      unsigned char mi = 'P', md = 'P';
-
-      if (pi.first >= 0 && pi.first < (int)mapaVisitas.size() &&
-          pi.second >= 0 && pi.second < (int)mapaVisitas[0].size())
-      {
-        vi = mapaVisitas[pi.first][pi.second];
-        mi = mapaResultado[pi.first][pi.second];
-      }
-
-      if (pd.first >= 0 && pd.first < (int)mapaVisitas.size() &&
-          pd.second >= 0 && pd.second < (int)mapaVisitas[0].size())
-      {
-        vd = mapaVisitas[pd.first][pd.second];
-        md = mapaResultado[pd.first][pd.second];
-      }
-
-      int giro = MejorGiroSegunMapaI(i, d, vi, vd, mi, md, last_action);
-
-      if (giro == 1)
-        accion = TURN_SL;
-      else if (giro == 3)
-        accion = TURN_SR;
-      else
-        accion = mano_derecha ? TURN_SR : TURN_SL;
-    }
-    else
-    {
-      bool mismaPos = (sensores.posF == ultimaPosF && sensores.posC == ultimaPosC);
-
-      int decision = ElegirMovimientoNivel0I(sensores, i, c, d,
-                                             mapaVisitas,
-                                             ultimaFila, ultimaCol,
-                                             mano_derecha);
-
-      switch (decision)
-      {
-      case 2:
-        accion = WALK;
-        break;
-      case 1:
-        accion = TURN_SL;
-        break;
-      case 3:
-        accion = TURN_SR;
-        break;
-      default:
-        accion = mano_derecha ? TURN_SR : TURN_SL;
-        break;
-      }
-
-      // Antibucle simple
-      if (mismaPos)
-      {
-        if (accion == TURN_SR || accion == TURN_SL)
-          giros_consecutivos++;
-        else
-          giros_consecutivos = 0;
-      }
-      else
-      {
-        giros_consecutivos = 0;
-      }
-
-      if (giros_consecutivos >= 4)
-      {
-        accion = (last_action == TURN_SR) ? TURN_SL : TURN_SR;
-        giros_consecutivos = 0;
-      }
-    }
-  }
-
-  // =========================================================
-  // 5. Actualización de memoria
-  // =========================================================
-  if (accion == WALK)
-  {
-    ultimaFila = sensores.posF;
-    ultimaCol = sensores.posC;
-  }
-
-  last_action = accion;
-  ultimaPosF = sensores.posF;
-  ultimaPosC = sensores.posC;
-  return accion;
+  return f >= 0 && f < (int)m.size() && c >= 0 && c < (int)m[0].size();
 }
+
+bool EsTransitableIngeniero(unsigned char cas)
+{
+  return cas == 'A' || cas == 'H' || cas == 'S' || cas == 'C' || cas == 'D' || cas == 'U' || cas == 'B';
+}
+
+
 /**
  * @brief Comprueba si una celda es de tipo camino transitable.
  * @param c Carácter que representa el tipo de superficie.
@@ -673,10 +505,7 @@ bool ComportamientoIngeniero::CasillaAccesibleJumpIngeniero(const EstadoI &st,
   return true;
 }
 
-ComportamientoIngeniero::EstadoI ComportamientoIngeniero::applyI(Action accion,
-                                                                 const EstadoI &st,
-                                                                 const vector<vector<unsigned char>> &terreno,
-                                                                 const vector<vector<unsigned char>> &altura)
+ComportamientoIngeniero::EstadoI ComportamientoIngeniero::applyI(Action accion,  const EstadoI &st, const vector<vector<unsigned char>> &terreno,const vector<vector<unsigned char>> &altura)
 {
   EstadoI next = st;
 
@@ -714,10 +543,7 @@ ComportamientoIngeniero::EstadoI ComportamientoIngeniero::applyI(Action accion,
   return next;
 }
 
-list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio,
-                                                          const ubicacion &destino,
-                                                          const vector<vector<unsigned char>> &terreno,
-                                                          const vector<vector<unsigned char>> &altura)
+list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio,const ubicacion &destino, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura)
 {
   list<Action> path;
   list<NodoI> frontier;
@@ -763,6 +589,8 @@ list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio,
 
   return path;
 }
+
+
 // Niveles avanzados (Uso de búsqueda)
 /**
  * @brief Comportamiento del ingeniero para el Nivel 2 (búsqueda).
@@ -841,8 +669,8 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_3(Sensores sensores
 
     ubicacion d = Delante(actual);
 
-    if (EsCasillaTransitable(d.f, d.c, tiene_zapatillas) &&
-        EsAccesiblePorAltura(actual) &&
+    if (EsCasillaTransitableLevel0(d.f, d.c, tiene_zapatillas) &&
+        EsAccesiblePorAltura(actual, tiene_zapatillas) &&
         mapaResultado[d.f][d.c] != 'P')
     {
         return WALK;
