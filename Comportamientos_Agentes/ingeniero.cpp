@@ -365,10 +365,10 @@ Action ComportamientoIngeniero::think(Sensores sensores)
   switch (sensores.nivel)
   {
   case 0:
-     //accion = ComportamientoIngenieroNivel_0(sensores);
+    // accion = ComportamientoIngenieroNivel_0(sensores);
     break;
   case 1:
-     //accion = ComportamientoIngenieroNivel_1(sensores);
+    // accion = ComportamientoIngenieroNivel_1(sensores);
     break;
   case 2:
     accion = ComportamientoIngenieroNivel_2(sensores);
@@ -401,7 +401,6 @@ bool EsTransitableIngeniero(unsigned char cas)
 {
   return cas == 'A' || cas == 'H' || cas == 'S' || cas == 'C' || cas == 'D' || cas == 'U' || cas == 'B';
 }
-
 
 /**
  * @brief Comprueba si una celda es de tipo camino transitable.
@@ -505,7 +504,7 @@ bool ComportamientoIngeniero::CasillaAccesibleJumpIngeniero(const EstadoI &st,
   return true;
 }
 
-ComportamientoIngeniero::EstadoI ComportamientoIngeniero::applyI(Action accion,  const EstadoI &st, const vector<vector<unsigned char>> &terreno,const vector<vector<unsigned char>> &altura)
+ComportamientoIngeniero::EstadoI ComportamientoIngeniero::applyI(Action accion, const EstadoI &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura)
 {
   EstadoI next = st;
 
@@ -543,7 +542,7 @@ ComportamientoIngeniero::EstadoI ComportamientoIngeniero::applyI(Action accion, 
   return next;
 }
 
-list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio,const ubicacion &destino, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura)
+list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio, const ubicacion &destino, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura)
 {
   list<Action> path;
   list<NodoI> frontier;
@@ -589,7 +588,6 @@ list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio,
 
   return path;
 }
-
 
 // Niveles avanzados (Uso de búsqueda)
 /**
@@ -657,26 +655,41 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_2(Sensores sensores
  */
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_3(Sensores sensores)
 {
-// Si el técnico está justo delante, giro para no bloquear
-    if (sensores.agentes[2] == 't')
-        return TURN_SR;
+  ubicacion actual;
+  actual.f = sensores.posF;
+  actual.c = sensores.posC;
+  actual.brujula = sensores.rumbo;
 
-    // Si el técnico está en el cono cercano y tengo delante libre, avanzo para apartarme
-    ubicacion actual;
-    actual.f = sensores.posF;
-    actual.c = sensores.posC;
-    actual.brujula = sensores.rumbo;
+  // Si el técnico está justo delante, girar para dejar de encararlo
+  if (sensores.agentes[2] == 't')
+    return TURN_SR;
 
+  // Si el técnico está en visión cercana, intentar apartarse una sola casilla
+  bool tecnico_cerca = false;
+  for (int i = 1; i < 16; i++)
+  {
+    if (sensores.agentes[i] == 't')
+    {
+      tecnico_cerca = true;
+      break;
+    }
+  }
+
+  if (tecnico_cerca)
+  {
     ubicacion d = Delante(actual);
 
     if (EsCasillaTransitableLevel0(d.f, d.c, tiene_zapatillas) &&
         EsAccesiblePorAltura(actual, tiene_zapatillas) &&
         mapaResultado[d.f][d.c] != 'P')
     {
-        return WALK;
+      return WALK;
     }
 
     return TURN_SR;
+  }
+
+  return IDLE;
 }
 
 /**
@@ -1079,7 +1092,7 @@ void ComportamientoIngeniero::VisualizaPlan(const ubicacion &st,
       if (cst.f >= 0 && cst.f < mapaResultado.size() &&
           cst.c >= 0 && cst.c < mapaResultado[0].size())
         listaPlanCasillas.push_back({cst.f, cst.c, JUMP});
-        break;
+      break;
     case WALK:
       switch (cst.brujula)
       {

@@ -170,13 +170,13 @@ Action ComportamientoTecnico::think(Sensores sensores)
   switch (sensores.nivel)
   {
   case 0:
-    //accion = ComportamientoTecnicoNivel_0(sensores);
+    // accion = ComportamientoTecnicoNivel_0(sensores);
     break;
   case 1:
-    //accion = ComportamientoTecnicoNivel_1(sensores);
+    // accion = ComportamientoTecnicoNivel_1(sensores);
     break;
   case 2:
-    //accion = ComportamientoTecnicoNivel_2(sensores);
+    // accion = ComportamientoTecnicoNivel_2(sensores);
     break;
   case 3:
     accion = ComportamientoTecnicoNivel_3(sensores);
@@ -200,7 +200,7 @@ bool EsCaminoNivel0T(char x)
   return x == 'C' || x == 'D' || x == 'U';
 }
 
-int ElegirMovimientoNivel0T(const Sensores &sensores, char i, char c, char d,  const vector<vector<int>> &mapaVisitas, int ultimaFila, int ultimaCol, bool mano_derecha)
+int ElegirMovimientoNivel0T(const Sensores &sensores, char i, char c, char d, const vector<vector<int>> &mapaVisitas, int ultimaFila, int ultimaCol, bool mano_derecha)
 {
   pair<int, int> pi = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 1);
   pair<int, int> pc = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 2);
@@ -227,9 +227,12 @@ int ElegirMovimientoNivel0T(const Sensores &sensores, char i, char c, char d,  c
     // Penalización fuerte por revisitar
     score -= 60 * vis;
 
-    if (vis >= 2) score -= 100;
-    if (vis >= 4) score -= 200;
-    if (vis >= 6) score -= 400;
+    if (vis >= 2)
+      score -= 100;
+    if (vis >= 4)
+      score -= 200;
+    if (vis >= 6)
+      score -= 400;
 
     // Penalización MUY fuerte por volver justo atrás
     if (p.first == ultimaFila && p.second == ultimaCol)
@@ -287,21 +290,27 @@ int ElegirMovimientoNivel0T(const Sensores &sensores, char i, char c, char d,  c
     int visI = enRango(pi) ? mapaVisitas[pi.first][pi.second] : 999999;
     int visD = enRango(pd) ? mapaVisitas[pd.first][pd.second] : 999999;
 
-    if (visI < visD) return 1;
-    if (visD < visI) return 3;
+    if (visI < visD)
+      return 1;
+    if (visD < visI)
+      return 3;
 
     return mano_derecha ? 3 : 1;
   }
 
   if (mano_derecha)
   {
-    if (scoreD > scoreI && scoreD > INF_NEG) return 3;
-    if (scoreI > INF_NEG) return 1;
+    if (scoreD > scoreI && scoreD > INF_NEG)
+      return 3;
+    if (scoreI > INF_NEG)
+      return 1;
   }
   else
   {
-    if (scoreI > scoreD && scoreI > INF_NEG) return 1;
-    if (scoreD > INF_NEG) return 3;
+    if (scoreI > scoreD && scoreI > INF_NEG)
+      return 1;
+    if (scoreD > INF_NEG)
+      return 3;
   }
 
   if (scoreC > INF_NEG)
@@ -310,7 +319,6 @@ int ElegirMovimientoNivel0T(const Sensores &sensores, char i, char c, char d,  c
   return 0;
 }
 // Niveles del técnico
-
 
 /**
  * @brief Comprueba si una celda es de tipo camino transitable.
@@ -497,26 +505,40 @@ int ComportamientoTecnico::CosteEnergiaTecnico(Action accion, const EstadoT &st)
   if (accion == WALK)
   {
     EstadoT next = NextCasillaTecnico(st);
-    int coste = 1;
+    int delta = (int)mapaCotas[next.site.f][next.site.c] - (int)mapaCotas[st.site.f][st.site.c];
 
     if (terreno == 'A')
-      coste = 60;
+    {
+      int coste = 60;
+      if (delta > 0)
+        coste += 5;
+      else if (delta < 0)
+        coste -= 2;
+      return coste;
+    }
     else if (terreno == 'H')
-      coste = 6;
+    {
+      int coste = 6;
+      if (delta > 0)
+        coste += 5;
+      else if (delta < 0)
+        coste -= 2;
+      return coste;
+    }
     else if (terreno == 'S')
-      coste = 3;
+    {
+      int coste = 3;
+      if (delta > 0)
+        coste += 5;
+      else if (delta < 0)
+        coste -= 2;
+      return coste;
+    }
     else
-      coste = 1;
-
-    int delta = (int)mapaCotas[next.site.f][next.site.c] - (int)mapaCotas[st.site.f][st.site.c];
-    if (delta > 0)
-      coste += 5;
-    else if (delta < 0)
-      coste -= 2;
-
-    if (coste < 0)
-      coste = 0;
-    return coste;
+    {
+      // Resto: C, D, U, X, B con zapatillas, etc.
+      return 1;
+    }
   }
 
   return 0;
@@ -552,6 +574,10 @@ list<Action> ComportamientoTecnico::AEstrellaTecnico(const EstadoT &inicio, cons
   {
     NodoT actual = abiertos.top();
     abiertos.pop();
+
+    auto it_mejor = mejor_g.find(actual.estado);
+    if (it_mejor != mejor_g.end() && actual.g > it_mejor->second)
+      continue;
 
     if (EsDestino(actual.estado, fin))
       return actual.secuencia;
@@ -595,6 +621,24 @@ list<Action> ComportamientoTecnico::AEstrellaTecnico(const EstadoT &inicio, cons
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_3(Sensores sensores)
 {
   Action accion = IDLE;
+
+  // Sincronizar estado real del agente
+  if (sensores.superficie[0] == 'D')
+    tiene_zapatillas = true;
+
+  // Si hubo reset, invalida el plan
+  if (sensores.reset)
+  {
+    hayPlan = false;
+    plan.clear();
+    return IDLE;
+  }
+  if (sensores.choque)
+  {
+    hayPlan = false;
+    plan.clear();
+    return IDLE;
+  }
 
   if (!hayPlan)
   {
