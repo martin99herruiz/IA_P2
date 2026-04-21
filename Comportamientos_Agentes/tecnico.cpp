@@ -547,7 +547,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
  */
 bool ComportamientoTecnico::es_camino(unsigned char c) const
 {
-  return (c == 'C' || c == 'D' || c == 'U');
+  return (c == 'C' || c == 'S' || c == 'D' || c == 'U');
 }
 
 /**
@@ -678,43 +678,48 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores)
  */
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_2(Sensores sensores)
 {
-  Action accion = IDLE;
+  if (sensores.superficie[0] == 'D')
+    tiene_zapatillas = true;
 
-  if (!hayPlan)
+  ubicacion actual;
+  actual.f = sensores.posF;
+  actual.c = sensores.posC;
+  actual.brujula = sensores.rumbo;
+
+  ubicacion del = Delante(actual);
+
+  bool ingenieroVisible = false;
+  for (int k = 1; k < 16; k++)
   {
-    EstadoT inicio, fin;
-    inicio.site.f = sensores.posF;
-    inicio.site.c = sensores.posC;
-    inicio.site.brujula = sensores.rumbo;
-    inicio.zapatillas = tiene_zapatillas;
-
-    fin.site.f = sensores.BelPosF;
-    fin.site.c = sensores.BelPosC;
-    fin.site.brujula = sensores.rumbo; // este campo da igual para comparar destino
-    fin.zapatillas = false;            // da igual también
-
-    plan = AEstrellaTecnico(inicio, fin);
-    VisualizaPlan(inicio.site, plan);
-    hayPlan = !plan.empty();
+    if (sensores.agentes[k] == 'i')
+    {
+      ingenieroVisible = true;
+      break;
+    }
   }
 
-  if (hayPlan && !plan.empty())
+  // Si estoy sobre la planta, me aparto en cuanto vea al Ingeniero
+  if (sensores.superficie[0] == 'U')
   {
-    accion = plan.front();
-    plan.pop_front();
+    if (!ingenieroVisible)
+      return IDLE;
+
+    if (EsCasillaTransitableLevel0(del.f, del.c, tiene_zapatillas) &&
+        EsAccesiblePorAltura(actual) &&
+        sensores.agentes[2] != 'i')
+    {
+      return WALK;
+    }
+
+    return TURN_SR;
   }
 
-  if (plan.empty())
-  {
-    hayPlan = false;
-  }
+  // Si no estoy sobre U, solo reacciono si realmente lo bloqueo delante
+  if (sensores.agentes[2] == 'i')
+    return TURN_SR;
 
-  return accion;
+  return IDLE;
 }
-
-//--------------------------------------------------------------------------------
-//             FUNCIONES AUXILIARES A*
-//---------------------------------------
 // ============================================================
 // FUNCIONES AUXILIARES NIVEL 3 - A*
 // ============================================================

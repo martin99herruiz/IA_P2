@@ -811,7 +811,7 @@ list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio,
       return current.secuencia;
     }
 
-    const Action acciones[4] = {WALK, JUMP, TURN_SR, TURN_SL};
+    const Action acciones[4] = {WALK, JUMP, TURN_SL, TURN_SR};
 
     for (Action a : acciones)
     {
@@ -1284,6 +1284,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
       cout << "Nivel 5: no se encontro plan valido\n";
       fase_n5 = N5_TERMINADO;
       return IDLE;
+
     }
 
     cout << "Nivel 5: plan calculado\n";
