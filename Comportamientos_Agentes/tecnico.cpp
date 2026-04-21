@@ -162,6 +162,7 @@ int VeoULejoT(const Sensores &sensores)
 
   return 0;
 }
+
 Action ComportamientoTecnico::think(Sensores sensores)
 {
   Action accion = IDLE;
@@ -170,13 +171,13 @@ Action ComportamientoTecnico::think(Sensores sensores)
   switch (sensores.nivel)
   {
   case 0:
-    // accion = ComportamientoTecnicoNivel_0(sensores);
+    accion = ComportamientoTecnicoNivel_0(sensores);
     break;
   case 1:
-    // accion = ComportamientoTecnicoNivel_1(sensores);
+    accion = ComportamientoTecnicoNivel_1(sensores);
     break;
   case 2:
-    // accion = ComportamientoTecnicoNivel_2(sensores);
+    accion = ComportamientoTecnicoNivel_2(sensores);
     break;
   case 3:
     accion = ComportamientoTecnicoNivel_3(sensores);
@@ -320,6 +321,225 @@ int ElegirMovimientoNivel0T(const Sensores &sensores, char i, char c, char d, co
 }
 // Niveles del técnico
 
+Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
+{
+  Action accion = IDLE;
+
+  // =========================================================
+  // 1. Fase de observación / actualización
+  // =========================================================
+  ActualizarMapa(sensores);
+  mapaVisitas[sensores.posF][sensores.posC]++;
+
+  if (sensores.superficie[0] == 'D')
+    tiene_zapatillas = true;
+  // Detectar si el técnico lleva varios turnos sin avanzar
+  bool mismaPosicion = (sensores.posF == ultimaPosF && sensores.posC == ultimaPosC);
+
+  if (mismaPosicion && last_action != IDLE)
+    turnos_sin_avanzar++;
+  else
+    turnos_sin_avanzar = 0;
+
+  // Si chocó al avanzar o lleva demasiado tiempo atascado, activar escape
+  if ((sensores.choque && last_action == WALK) || turnos_sin_avanzar >= 6)
+  {
+    plan_escape = 2;
+    turnos_sin_avanzar = 0;
+  }
+
+  // Modo escape: durante unos turnos rompe el patrón local
+  if (plan_escape > 0)
+  {
+    plan_escape--;
+
+    // Como el técnico usa mano izquierda, rompe el atasco girando a la izquierda
+    accion = TURN_SL;
+
+    last_action = accion;
+    ultimaPosF = sensores.posF;
+    ultimaPosC = sensores.posC;
+    return accion;
+  }
+
+  // Si llegué a planta, me quedo quieto
+  // if (sensores.superficie[0] == 'U')
+  //  accion = IDLE;
+
+  if (sensores.superficie[0] == 'U')
+  {
+    last_action = IDLE;
+    ultimaPosF = sensores.posF;
+    ultimaPosC = sensores.posC;
+    return IDLE;
+  }
+  // =========================================================
+  // 2. Construcción de las 3 opciones inmediatas (izq-centro-der)
+  //    usando más los métodos del profesor
+  // =========================================================
+  pair<int, int> pi = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 1);
+  pair<int, int> pc = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 2);
+  pair<int, int> pd = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 3);
+
+  auto enRangoMapa = [&](pair<int, int> p)
+  {
+    return p.first >= 0 && p.first < (int)mapaResultado.size() &&
+           p.second >= 0 && p.second < (int)mapaResultado[0].size();
+  };
+
+  auto viableLateral = [&](pair<int, int> p, char casillaSensor, int idxSensor)
+  {
+    if (!enRangoMapa(p))
+      return 'P';
+
+    // El método del profesor comprueba tránsito en nivel 0
+    if (!EsCasillaTransitableLevel0(p.first, p.second, tiene_zapatillas))
+      return 'P';
+
+    // Para el Técnico el desnivel máximo es siempre 1
+    int dif = sensores.cota[idxSensor] - sensores.cota[0];
+    if (abs(dif) > 1)
+      return 'P';
+
+    return casillaSensor;
+  };
+
+  // Centro: aprovechamos la idea del método del profesor
+  ubicacion actual;
+  actual.f = sensores.posF;
+  actual.c = sensores.posC;
+  actual.brujula = sensores.rumbo;
+
+  char c = 'P';
+  if (EsAccesiblePorAltura(actual) &&
+      enRangoMapa(pc) &&
+      EsCasillaTransitableLevel0(pc.first, pc.second, tiene_zapatillas))
+  {
+    c = sensores.superficie[2];
+  }
+
+  // Izquierda y derecha: misma lógica, calculadas con su coordenada
+  char i = viableLateral(pi, sensores.superficie[1], 1);
+  char d = viableLateral(pd, sensores.superficie[3], 3);
+
+  // =========================================================
+  // 3. Reglas reactivas de conflicto
+  // =========================================================
+
+  bool ingenieroIzq = (sensores.agentes[1] == 'i');
+  bool ingenieroCen = (sensores.agentes[2] == 'i');
+  bool ingenieroDer = (sensores.agentes[3] == 'i');
+
+  if (ingenieroIzq)
+    i = 'P';
+  if (ingenieroCen)
+    c = 'P';
+  if (ingenieroDer)
+    d = 'P';
+
+  bool ingenieroCerca = ingenieroIzq || ingenieroCen || ingenieroDer;
+
+  if (ingenieroCerca)
+  {
+    if (i == 'U')
+      i = 'P';
+    if (c == 'U')
+      c = 'P';
+    if (d == 'U')
+      d = 'P';
+  }
+
+  if (sensores.choque && last_action == WALK)
+  {
+    accion = mano_derecha ? TURN_SR : TURN_SL;
+    last_action = accion;
+    ultimaPosF = sensores.posF;
+    ultimaPosC = sensores.posC;
+    return accion;
+  }
+
+  bool mismaPos = (sensores.posF == ultimaPosF && sensores.posC == ultimaPosC);
+
+  // =========================================================
+  // 4. Decisión reactiva
+  // =========================================================
+
+  // Las U inmediatas mandan
+  if (c == 'U')
+    accion = WALK;
+  else if (i == 'U')
+    accion = TURN_SL;
+  else if (d == 'U')
+    accion = TURN_SR;
+  else
+  {
+    int decision = ElegirMovimientoNivel0T(sensores, i, c, d,
+                                           mapaVisitas,
+                                           ultimaFila, ultimaCol,
+                                           mano_derecha);
+
+    switch (decision)
+    {
+    case 2:
+      accion = WALK;
+      break;
+    case 1:
+      accion = TURN_SL;
+      break;
+    case 3:
+      accion = TURN_SR;
+      break;
+    default:
+    {
+      // La U lejana solo orienta si no hay mejor opción local
+      int posU = VeoULejoT(sensores);
+
+      if (posU == 1)
+        accion = TURN_SL;
+      else if (posU == 3)
+        accion = TURN_SR;
+      else
+        accion = mano_derecha ? TURN_SR : TURN_SL;
+
+      break;
+    }
+    }
+
+    // Antibucle simple
+    if (mismaPos)
+    {
+      if (accion == TURN_SR || accion == TURN_SL)
+        giros_consecutivos++;
+      else
+        giros_consecutivos = 0;
+    }
+    else
+    {
+      giros_consecutivos = 0;
+    }
+
+    if (giros_consecutivos >= 4)
+    {
+      accion = (last_action == TURN_SR) ? TURN_SL : TURN_SR;
+      giros_consecutivos = 0;
+    }
+  }
+
+  // =========================================================
+  // 5. Actualización de memoria
+  // =========================================================
+  if (accion == WALK)
+  {
+    ultimaFila = sensores.posF;
+    ultimaCol = sensores.posC;
+  }
+
+  last_action = accion;
+  ultimaPosF = sensores.posF;
+  ultimaPosC = sensores.posC;
+  return accion;
+}
+
 /**
  * @brief Comprueba si una celda es de tipo camino transitable.
  * @param c Carácter que representa el tipo de superficie.
@@ -328,6 +548,127 @@ int ElegirMovimientoNivel0T(const Sensores &sensores, char i, char c, char d, co
 bool ComportamientoTecnico::es_camino(unsigned char c) const
 {
   return (c == 'C' || c == 'D' || c == 'U');
+}
+
+/**
+ * @brief Comportamiento reactivo del técnico para el Nivel 1.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
+Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores)
+{
+  Action accion = IDLE;
+
+  bool mismaCasilla = (sensores.posF == ultimaPosF && sensores.posC == ultimaPosC);
+
+  if (mismaCasilla && last_action != WALK)
+    turnos_sin_avanzar++;
+  else
+    turnos_sin_avanzar = 0;
+
+  if (turnos_sin_avanzar >= 4)
+  {
+    if (last_action == TURN_SL || last_action == TURN_SR)
+      accion = last_action;
+    else
+      accion = TURN_SL;
+
+    last_action = accion;
+    ultimaPosF = sensores.posF;
+    ultimaPosC = sensores.posC;
+    turnos_sin_avanzar = 0;
+    return accion;
+  }
+
+  pair<int, int> pi = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 1);
+  pair<int, int> pc = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 2);
+  pair<int, int> pd = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 3);
+
+  unsigned char mi = mapaResultado[pi.first][pi.second];
+  unsigned char mc = mapaResultado[pc.first][pc.second];
+  unsigned char md = mapaResultado[pd.first][pd.second];
+
+  int vi = mapaVisitas[pi.first][pi.second];
+  int vc = mapaVisitas[pc.first][pc.second];
+  int vd = mapaVisitas[pd.first][pd.second];
+
+  ActualizarMapa(sensores);
+  mapaVisitas[sensores.posF][sensores.posC]++;
+
+  if (sensores.superficie[0] == 'D')
+    tiene_zapatillas = true;
+
+  char i = ViablePorAlturaT(sensores.superficie[1],
+                            sensores.cota[1] - sensores.cota[0],
+                            tiene_zapatillas);
+
+  char c = ViablePorAlturaT(sensores.superficie[2],
+                            sensores.cota[2] - sensores.cota[0],
+                            tiene_zapatillas);
+
+  char d = ViablePorAlturaT(sensores.superficie[3],
+                            sensores.cota[3] - sensores.cota[0],
+                            tiene_zapatillas);
+
+  // Evitar chocar con el Ingeniero
+  if (sensores.agentes[1] == 'i')
+    i = 'P';
+  if (sensores.agentes[2] == 'i')
+    c = 'P';
+  if (sensores.agentes[3] == 'i')
+    d = 'P';
+
+  int scoreI = PuntuarCasillaNivel1T(i, mi, vi, pi.first, pi.second, ultimaFila, ultimaCol, tiene_zapatillas);
+  int scoreC = PuntuarCasillaNivel1T(c, mc, vc, pc.first, pc.second, ultimaFila, ultimaCol, tiene_zapatillas);
+  int scoreD = PuntuarCasillaNivel1T(d, md, vd, pd.first, pd.second, ultimaFila, ultimaCol, tiene_zapatillas);
+
+  if (sensores.choque)
+  {
+    if (scoreD > scoreI)
+      accion = TURN_SR;
+    else if (scoreI > scoreD)
+      accion = TURN_SL;
+    else
+    {
+      if (last_action == TURN_SL || last_action == TURN_SR)
+        accion = last_action;
+      else
+        accion = TURN_SL;
+    }
+  }
+  else
+  {
+    if (scoreC >= scoreI && scoreC >= scoreD && scoreC > -100000)
+    {
+      accion = WALK;
+    }
+    else if (scoreD > scoreI && scoreD > -100000)
+    {
+      accion = TURN_SR; // sesgo opuesto al Ingeniero
+    }
+    else if (scoreI > scoreD && scoreI > -100000)
+    {
+      accion = TURN_SL;
+    }
+    else
+    {
+      if (last_action == TURN_SL || last_action == TURN_SR)
+        accion = last_action;
+      else
+        accion = TURN_SL;
+    }
+  }
+
+  if (accion == WALK)
+  {
+    ultimaFila = sensores.posF;
+    ultimaCol = sensores.posC;
+  }
+
+  ultimaPosF = sensores.posF;
+  ultimaPosC = sensores.posC;
+  last_action = accion;
+  return accion;
 }
 
 /**
@@ -680,6 +1021,34 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_4(Sensores sensores)
   return IDLE;
 }
 
+//====================================================================
+//             Niveles 5  - COMPORTAMIENTO FINAL
+//====================================================================
+
+bool ComportamientoTecnico::MismaCasilla(const ubicacion &u, int f, int c) const
+{
+  return u.f == f && u.c == c;
+}
+
+bool ComportamientoTecnico::EsAdyacenteOrtogonal(int f1, int c1, int f2, int c2) const
+{
+  return (abs(f1 - f2) + abs(c1 - c2)) == 1;
+}
+
+Orientacion ComportamientoTecnico::OrientacionHacia(int f1, int c1, int f2, int c2) const
+{
+  if (f2 == f1 - 1 && c2 == c1)
+    return norte;
+  if (f2 == f1 + 1 && c2 == c1)
+    return sur;
+  if (f2 == f1 && c2 == c1 + 1)
+    return este;
+  if (f2 == f1 && c2 == c1 - 1)
+    return oeste;
+
+  return norte; // caso imposible si la relación es ortogonal
+}
+
 /**
  * @brief Comportamiento del técnico para el Nivel 5.
  * @param sensores Datos actuales de los sensores.
@@ -687,9 +1056,131 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_4(Sensores sensores)
  */
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores)
 {
+  Action accion = IDLE;
+
+  if (sensores.superficie[0] == 'D')
+    tiene_zapatillas = true;
+
+  ubicacion actual;
+  actual.f = sensores.posF;
+  actual.c = sensores.posC;
+  actual.brujula = sensores.rumbo;
+
+  cout << "[TEC N5] estado=" << estado_n5
+       << " pos=(" << sensores.posF << "," << sensores.posC << ")"
+       << " rumbo=" << sensores.rumbo
+       << " venpaca=" << sensores.venpaca
+       << " goto=(" << sensores.GotoF << "," << sensores.GotoC << ")"
+       << " enfrente=" << sensores.enfrente
+       << " choque=" << sensores.choque
+       << " reset=" << sensores.reset
+       << endl;
+
+  // Si hubo reset o choque, reiniciar estado interno
+  if (sensores.reset || sensores.choque)
+  {
+    hayPlan = false;
+    plan.clear();
+    estado_n5 = T5_LIBRE;
+    hayObjetivoN5 = false;
+    return IDLE;
+  }
+
+  // Si ya estoy en espera de instalación
+  if (estado_n5 == T5_ESPERANDO_INSTALL)
+  {
+    if (sensores.enfrente)
+    {
+      cout << "[TEC N5] intento INSTALL\n";
+      return INSTALL;
+    }
+
+    if (sensores.agentes[2] == 'i')
+      return IDLE;
+
+    if (sensores.agentes[1] == 'i')
+      return TURN_SL;
+
+    if (sensores.agentes[3] == 'i')
+      return TURN_SR;
+
+    return IDLE;
+  }
+
+  // Si el ingeniero me llama, actualizo objetivo
+  if (sensores.venpaca)
+  {
+    objetivo_n5.f = sensores.GotoF;
+    objetivo_n5.c = sensores.GotoC;
+    objetivo_n5.brujula = sensores.rumbo;
+
+    hayObjetivoN5 = true;
+
+    cout << "[TEC N5] nuevo objetivo=("
+         << objetivo_n5.f << "," << objetivo_n5.c << ")\n";
+
+    if (MismaCasilla(actual, objetivo_n5.f, objetivo_n5.c))
+    {
+      hayPlan = false;
+      plan.clear();
+      estado_n5 = T5_ESPERANDO_INSTALL;
+    }
+    else
+    {
+      estado_n5 = T5_YENDO_OBJETIVO;
+      hayPlan = false;
+      plan.clear();
+    }
+  }
+
+  // Si estoy yendo al objetivo marcado por el Ingeniero
+  if (estado_n5 == T5_YENDO_OBJETIVO && hayObjetivoN5)
+  {
+    if (MismaCasilla(actual, objetivo_n5.f, objetivo_n5.c))
+    {
+      cout << "[TEC N5] objetivo alcanzado, esperando INSTALL\n";
+      hayPlan = false;
+      plan.clear();
+      estado_n5 = T5_ESPERANDO_INSTALL;
+      return IDLE;
+    }
+
+    if (!hayPlan)
+    {
+      EstadoT inicio, fin;
+      inicio.site.f = sensores.posF;
+      inicio.site.c = sensores.posC;
+      inicio.site.brujula = sensores.rumbo;
+      inicio.zapatillas = tiene_zapatillas;
+
+      fin.site.f = objetivo_n5.f;
+      fin.site.c = objetivo_n5.c;
+      fin.site.brujula = sensores.rumbo;
+      fin.zapatillas = false;
+
+      cout << "[TEC N5] calculando plan hacia ("
+           << objetivo_n5.f << "," << objetivo_n5.c << ")\n";
+
+      plan = AEstrellaTecnico(inicio, fin);
+      hayPlan = !plan.empty();
+
+      if (hayPlan)
+        VisualizaPlan(inicio.site, plan);
+      else
+        return IDLE;
+    }
+
+    accion = plan.front();
+    plan.pop_front();
+
+    if (plan.empty())
+      hayPlan = false;
+
+    return accion;
+  }
+
   return IDLE;
 }
-
 /**
  * @brief Comportamiento del técnico para el Nivel 6.
  * @param sensores Datos actuales de los sensores.
@@ -1052,6 +1543,7 @@ void ComportamientoTecnico::VisualizaPlan(const ubicacion &st,
       if (cst.f >= 0 && cst.f < mapaResultado.size() &&
           cst.c >= 0 && cst.c < mapaResultado[0].size())
         listaPlanCasillas.push_back({cst.f, cst.c, JUMP});
+      break;
     case WALK:
       switch (cst.brujula)
       {

@@ -15,13 +15,48 @@ class ComportamientoIngeniero : public Comportamiento
 {
 public:
   // =========================================================================
+  // TIPOS AUXILIARES NIVEL 4
+  // =========================================================================
+
+  struct Paso
+  {
+    int fil;
+    int col;
+    int op; // -1 DIG, 0 nada, 1 RAISE
+  };
+
+  struct Nodo
+  {
+    int f, c;
+    int h;
+    int installs;
+    int impacto;
+    int pf, pc; // casilla anterior
+    std::list<Paso> plan;
+  };
+
+  // =========================================================================
+  // TIPOS AUXILIARES NIVEL 5
+  // =========================================================================
+
+  enum FaseNivel5
+  {
+    N5_PLANIFICAR,
+    N5_PREPARAR_TRAMO,
+    N5_IR_A_POSICION_ING,
+    N5_LLAMAR_TECNICO,
+    N5_ESPERAR_TECNICO,
+    N5_AJUSTAR_TERRENO,
+    N5_ALINEAR,
+    N5_INSTALAR,
+    N5_SIGUIENTE_TRAMO,
+    N5_TERMINADO
+  };
+
+  // =========================================================================
   // CONSTRUCTORES
   // =========================================================================
 
-  /**
-   * @brief Constructor para niveles 0, 1 y 6 (sin mapa completo)
-   * @param size Tamaño del mapa (si es 0, se inicializa más tarde)
-   */
   ComportamientoIngeniero(unsigned int size = 0) : Comportamiento(size)
   {
     last_action = IDLE;
@@ -35,14 +70,20 @@ public:
     ultimaPosC = -1;
     plan_escape = 0;
     mano_derecha = true;
+
     hayPlan = false;
+    planNivel4Calculado = false;
+
+    fase_n5 = N5_PLANIFICAR;
+    espera_tecnico_n5 = 0;
+    plan_n5_inicializado = false;
+    hay_plan_mov_n5 = false;
+    terreno_ajustado_n5 = false;
+    tecnico_convocado_n5 = false;
+    tecnico_en_posicion_n5 = false;
+    tramo_instalado_n5 = false;
   }
 
-  /**
-   * @brief Constructor para niveles 2, 3, 4 y 5 (con mapa completo conocido)
-   * @param mapaR Mapa de terreno conocido
-   * @param mapaC Mapa de cotas conocido
-   */
   ComportamientoIngeniero(std::vector<std::vector<unsigned char>> mapaR,
                           std::vector<std::vector<unsigned char>> mapaC)
       : Comportamiento(mapaR, mapaC)
@@ -58,7 +99,18 @@ public:
     ultimaPosC = -1;
     plan_escape = 0;
     mano_derecha = true;
+
     hayPlan = false;
+    planNivel4Calculado = false;
+
+    fase_n5 = N5_PLANIFICAR;
+    espera_tecnico_n5 = 0;
+    plan_n5_inicializado = false;
+    hay_plan_mov_n5 = false;
+    terreno_ajustado_n5 = false;
+    tecnico_convocado_n5 = false;
+    tecnico_en_posicion_n5 = false;
+    tramo_instalado_n5 = false;
   }
 
   ComportamientoIngeniero(const ComportamientoIngeniero &comport)
@@ -66,11 +118,6 @@ public:
 
   ~ComportamientoIngeniero() {}
 
-  /**
-   * @brief Bucle principal de decisión del agente.
-   * @param sensores Datos actuales de sensores.
-   * @return Acción a realizar.
-   */
   Action think(Sensores sensores);
 
   ComportamientoIngeniero *clone()
@@ -123,9 +170,12 @@ private:
 
     bool operator<(const EstadoI &other) const
     {
-      if (site.f != other.site.f) return site.f < other.site.f;
-      if (site.c != other.site.c) return site.c < other.site.c;
-      if (site.brujula != other.site.brujula) return site.brujula < other.site.brujula;
+      if (site.f != other.site.f)
+        return site.f < other.site.f;
+      if (site.c != other.site.c)
+        return site.c < other.site.c;
+      if (site.brujula != other.site.brujula)
+        return site.brujula < other.site.brujula;
       return zapatillas < other.zapatillas;
     }
   };
@@ -152,7 +202,7 @@ private:
 
   EstadoI NextCasillaIngeniero(const EstadoI &st);
   EstadoI NextCasillaIngeniero2(const EstadoI &st);
-  bool EnRango(int f, int c, const vector<vector<unsigned char>> &m) const;
+  bool EnRango(int f, int c, const std::vector<std::vector<unsigned char>> &m) const;
 
   bool CasillaAccesibleIngeniero(const EstadoI &st,
                                  const std::vector<std::vector<unsigned char>> &terreno,
@@ -173,6 +223,28 @@ private:
                                         const std::vector<std::vector<unsigned char>> &altura);
 
   // =========================================================================
+  // FUNCIONES AUXILIARES DE BÚSQUEDA NIVEL 4
+  // =========================================================================
+
+  bool DentroMapa(int f, int c) const;
+  bool CasillaValidaParaTuberia(int f, int c) const;
+  bool OperacionValidaEnCasilla(int f, int c, int op) const;
+  int ImpactoInstallCasilla(int f, int c) const;
+  int ImpactoOperacionCasilla(int f, int c, int op) const;
+  bool YaEnPlan(const std::list<Paso> &plan, int f, int c) const;
+
+  std::list<Paso> BuscarPlanNivel4(const ubicacion &origen, int maxImpacto);
+
+  // =========================================================================
+  // AUXILIARES NIVEL 5
+  // =========================================================================
+
+  bool MismaCasilla(const ubicacion &u, int f, int c) const;
+  bool EsAdyacenteOrtogonal(int f1, int c1, int f2, int c2) const;
+  Orientacion OrientacionHacia(int f1, int c1, int f2, int c2) const;
+  bool AgenteEnObjetivo(const ubicacion &u, const ubicacion &obj) const;
+
+  // =========================================================================
   // VARIABLES DE ESTADO
   // =========================================================================
 
@@ -188,8 +260,33 @@ private:
   int plan_escape;
   bool mano_derecha;
 
+  // Niveles deliberativos previos
   std::list<Action> plan;
   bool hayPlan;
+  bool planNivel4Calculado;
+
+  // Nivel 5
+  FaseNivel5 fase_n5;
+
+  std::list<Paso> plan_tuberias_n5;
+  std::list<Paso>::iterator it_tramo_n5;
+  bool plan_n5_inicializado;
+
+  Paso paso_origen_n5;
+  Paso paso_destino_n5;
+
+  ubicacion objetivo_ing_n5;
+  ubicacion objetivo_tec_n5;
+
+  std::list<Action> plan_mov_n5;
+  bool hay_plan_mov_n5;
+
+  bool terreno_ajustado_n5;
+  bool tecnico_convocado_n5;
+  bool tecnico_en_posicion_n5;
+  bool tramo_instalado_n5;
+
+  int espera_tecnico_n5;
 };
 
 #endif

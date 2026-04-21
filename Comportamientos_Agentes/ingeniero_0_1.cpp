@@ -13,8 +13,8 @@ using namespace std;
 
 int MejorGiroSegunMapaI(char i, char d, int vi, int vd, unsigned char mi, unsigned char md, Action last_action)
 {
-  bool izqTransitable = (i == 'C' || i == 'S' || i == 'D' || i == 'U');
-  bool derTransitable = (d == 'C' || d == 'S' || d == 'D' || d == 'U');
+  bool izqTransitable = (i == 'C' || i == 'D' || i == 'U');
+  bool derTransitable = (d == 'C' || d == 'D' || d == 'U');
 
   if (izqTransitable && !derTransitable)
     return 1;
@@ -23,21 +23,18 @@ int MejorGiroSegunMapaI(char i, char d, int vi, int vd, unsigned char mi, unsign
   if (!izqTransitable && !derTransitable)
     return 0;
 
-  // Prioridad a casillas desconocidas
-  if (mi == '?' && md != '?')
-    return 1;
-  if (md == '?' && mi != '?')
-    return 3;
-
-  // Prioridad a la menos visitada
+  // Prioridad a casillas menos visitadas
   if (vi < vd)
     return 1;
   if (vd < vi)
     return 3;
 
-  // Empate: alternar respecto al último giro
+  // Empate: evitar alternancia tonta
   if (last_action == TURN_SL)
+    return 1;
+  if (last_action == TURN_SR)
     return 3;
+
   return 1;
 }
 
@@ -112,7 +109,7 @@ bool EsTransitableNivel1I(char casilla)
 
 int PuntuarCasillaNivel1I(char visible, unsigned char conocida, int visitas, int f, int c, int ultimaF, int ultimaC)
 {
-  if (!EsTransitableNivel1I(visible))
+  if (!EsCasilla(visible))
     return -100000;
 
   int score = 0;
@@ -214,94 +211,146 @@ int VeoCasillaInteresanteI(char i, char c, char d, bool zap)
 
   return 0;
 }
+
 bool EsCaminoNivel0I(char x)
 {
   return x == 'C' || x == 'D' || x == 'U';
 }
 
-int ElegirMovimientoNivel0I(const Sensores &sensores, char i, char c, char d,const vector<vector<int>> &mapaVisitas,int ultimaFila, int ultimaCol, bool mano_derecha)
+int ElegirMovimientoNivel0I(const Sensores &sensores, char i, char c, char d, const vector<vector<int>> &mapaVisitas, int ultimaFila, int ultimaCol, bool mano_derecha)
 {
   // Prioridad absoluta a U
-  if (c == 'U') return 2;
-  if (mano_derecha && d == 'U') return 3;
-  if (!mano_derecha && i == 'U') return 1;
-  if (d == 'U') return 3;
-  if (i == 'U') return 1;
+  if (c == 'U')
+    return 2;
+  if (mano_derecha && d == 'U')
+    return 3;
+  if (!mano_derecha && i == 'U')
+    return 1;
+  if (d == 'U')
+    return 3;
+  if (i == 'U')
+    return 1;
 
   // Prioridad a D
-  if (c == 'D') return 2;
-  if (mano_derecha && d == 'D') return 3;
-  if (!mano_derecha && i == 'D') return 1;
-  if (d == 'D') return 3;
-  if (i == 'D') return 1;
+  if (c == 'D')
+    return 2;
+  if (mano_derecha && d == 'D')
+    return 3;
+  if (!mano_derecha && i == 'D')
+    return 1;
+  if (d == 'D')
+    return 3;
+  if (i == 'D')
+    return 1;
 
-  pair<int,int> pi = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 1);
-  pair<int,int> pc = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 2);
-  pair<int,int> pd = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 3);
+  pair<int, int> pi = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 1);
+  pair<int, int> pc = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 2);
+  pair<int, int> pd = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 3);
 
   const int INF_NEG = -1000000;
 
-  auto puntuar = [&](char casilla, pair<int,int> p) {
-    if (!(casilla == 'C' || casilla == 'D' || casilla == 'U')) return INF_NEG;
+  auto enRango = [&](pair<int, int> p)
+  {
+    return p.first >= 0 && p.first < (int)mapaVisitas.size() &&
+           p.second >= 0 && p.second < (int)mapaVisitas[0].size();
+  };
 
+  auto puntuar = [&](char casilla, pair<int, int> p, bool esCentro)
+  {
+    if (!(casilla == 'C' || casilla == 'D' || casilla == 'U'))
+      return INF_NEG;
+    if (!enRango(p))
+      return INF_NEG;
+
+    int visitas = mapaVisitas[p.first][p.second];
     int score = 0;
 
-    // Preferir menos visitadas
-    score -= 25 * mapaVisitas[p.first][p.second];
+    // Penalización fuerte por revisitar
+    score -= 60 * visitas;
+
+    if (visitas >= 2)
+      score -= 100;
+    if (visitas >= 4)
+      score -= 200;
+    if (visitas >= 6)
+      score -= 400;
+
+    // Penalización por volver justo atrás
     if (p.first == ultimaFila && p.second == ultimaCol)
-        score -= 200;
+      score -= 500;
+
+    // Bonus por seguir recto en mapas uniformes
+    if (esCentro)
+      score += 40;
+
+    // Penalizar un poco las vibraciones de giro
+    if (!esCentro && (sensores.rumbo % 2 != 0))
+      score -= 5;
 
     return score;
   };
 
-  int scoreI = puntuar(i, pi);
-  int scoreC = puntuar(c, pc);
-  int scoreD = puntuar(d, pd);
+  int scoreI = puntuar(i, pi, false);
+  int scoreC = puntuar(c, pc, true);
+  int scoreD = puntuar(d, pd, false);
 
-  // En empate, mantener sesgo
-  if (scoreC >= scoreI && scoreC >= scoreD && scoreC > INF_NEG) return 2;
-  if (mano_derecha) {
-    if (scoreD >= scoreI && scoreD > INF_NEG) return 3;
-    if (scoreI > INF_NEG) return 1;
-  } else {
-    if (scoreI >= scoreD && scoreI > INF_NEG) return 1;
-    if (scoreD > INF_NEG) return 3;
+  // Si el centro es claramente mejor, avanzar
+  if (scoreC > scoreI && scoreC > scoreD && scoreC > INF_NEG)
+    return 2;
+
+  // Empates con el centro: favorecer avanzar si no es volver atrás
+  if (scoreC == scoreI && scoreC > scoreD && scoreC > INF_NEG)
+  {
+    if (!(pc.first == ultimaFila && pc.second == ultimaCol))
+      return 2;
   }
+
+  if (scoreC == scoreD && scoreC > scoreI && scoreC > INF_NEG)
+  {
+    if (!(pc.first == ultimaFila && pc.second == ultimaCol))
+      return 2;
+  }
+
+  if (scoreC == scoreI && scoreC == scoreD && scoreC > INF_NEG)
+  {
+    if (!(pc.first == ultimaFila && pc.second == ultimaCol))
+      return 2;
+  }
+
+  // Desempate izquierda/derecha por menos visitas
+  if (scoreI == scoreD && scoreI > INF_NEG)
+  {
+    int visI = enRango(pi) ? mapaVisitas[pi.first][pi.second] : 999999;
+    int visD = enRango(pd) ? mapaVisitas[pd.first][pd.second] : 999999;
+
+    if (visI < visD)
+      return 1;
+    if (visD < visI)
+      return 3;
+
+    return mano_derecha ? 3 : 1;
+  }
+
+  if (mano_derecha)
+  {
+    if (scoreD > scoreI && scoreD > INF_NEG)
+      return 3;
+    if (scoreI > INF_NEG)
+      return 1;
+  }
+  else
+  {
+    if (scoreI > scoreD && scoreI > INF_NEG)
+      return 1;
+    if (scoreD > INF_NEG)
+      return 3;
+  }
+
+  // Último recurso: si el centro sigue siendo viable, usarlo
+  if (scoreC > INF_NEG)
+    return 2;
 
   return 0;
-}
-
-Action ComportamientoIngeniero::think(Sensores sensores)
-{
-  Action accion = IDLE;
-
-  // Decisión del agente según el nivel
-  switch (sensores.nivel)
-  {
-  case 0:
-    accion = ComportamientoIngenieroNivel_0(sensores);
-    break;
-  case 1:
-    accion = ComportamientoIngenieroNivel_1(sensores);
-    break;
-  case 2:
-    accion = ComportamientoIngenieroNivel_2(sensores);
-    break;
-  case 3:
-    accion = ComportamientoIngenieroNivel_3(sensores);
-    break;
-  case 4:
-    accion = ComportamientoIngenieroNivel_4(sensores);
-    break;
-  case 5:
-    accion = ComportamientoIngenieroNivel_5(sensores);
-    break;
-  case 6:
-    accion = ComportamientoIngenieroNivel_6(sensores);
-    break;
-  }
-
-  return accion;
 }
 
 // Niveles iniciales (Comportamientos reactivos simples)
@@ -328,9 +377,12 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
                             sensores.cota[3] - sensores.cota[0],
                             tiene_zapatillas);
 
-  if (sensores.agentes[1] == 't') i = 'P';
-  if (sensores.agentes[2] == 't') c = 'P';
-  if (sensores.agentes[3] == 't') d = 'P';
+  if (sensores.agentes[1] == 't')
+    i = 'P';
+  if (sensores.agentes[2] == 't')
+    c = 'P';
+  if (sensores.agentes[3] == 't')
+    d = 'P';
 
   bool mismaPos = (sensores.posF == ultimaPosF && sensores.posC == ultimaPosC);
 
@@ -341,12 +393,18 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
 
   switch (decision)
   {
-    case 2: accion = WALK; break;
-    case 1: accion = TURN_SL; break;
-    case 3: accion = TURN_SR; break;
-    default:
-      accion = mano_derecha ? TURN_SR : TURN_SL;
-      break;
+  case 2:
+    accion = WALK;
+    break;
+  case 1:
+    accion = TURN_SL;
+    break;
+  case 3:
+    accion = TURN_SR;
+    break;
+  default:
+    accion = mano_derecha ? TURN_SR : TURN_SL;
+    break;
   }
 
   // Control de bucle
@@ -379,16 +437,6 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   ultimaPosF = sensores.posF;
   ultimaPosC = sensores.posC;
   return accion;
-}
-
-/**
- * @brief Comprueba si una celda es de tipo camino transitable.
- * @param c Carácter que representa el tipo de superficie.
- * @return true si es camino ('C'), zapatillas ('D') o meta ('U').
- */
-bool ComportamientoIngeniero::es_camino(unsigned char c) const
-{
-  return (c == 'C' || c == 'D' || c == 'U');
 }
 
 /**
@@ -516,6 +564,306 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_1(Sensores sensores
   return accion;
 }
 
+//-----------------------------------------------------------------------------
+//
+//                            FUNCIONES 2
+//
+//-----------------------------------------------------------------------------
+
+bool ComportamientoIngeniero::EnRango(int f, int c, const vector<vector<unsigned char>> &m) const
+{
+  return f >= 0 && f < (int)m.size() && c >= 0 && c < (int)m[0].size();
+}
+
+bool EsTransitableIngeniero(unsigned char cas)
+{
+  return cas == 'A' || cas == 'H' || cas == 'S' || cas == 'C' || cas == 'D' || cas == 'U';
+}
+
+ComportamientoIngeniero::EstadoI ComportamientoIngeniero::NextCasillaIngeniero(const EstadoI &st)
+{
+  EstadoI siguiente = st;
+
+  switch (st.site.brujula)
+  {
+  case norte:
+    siguiente.site.f--;
+    break;
+  case noreste:
+    siguiente.site.f--;
+    siguiente.site.c++;
+    break;
+  case este:
+    siguiente.site.c++;
+    break;
+  case sureste:
+    siguiente.site.f++;
+    siguiente.site.c++;
+    break;
+  case sur:
+    siguiente.site.f++;
+    break;
+  case suroeste:
+    siguiente.site.f++;
+    siguiente.site.c--;
+    break;
+  case oeste:
+    siguiente.site.c--;
+    break;
+  case noroeste:
+    siguiente.site.f--;
+    siguiente.site.c--;
+    break;
+  }
+
+  return siguiente;
+}
+
+ComportamientoIngeniero::EstadoI ComportamientoIngeniero::NextCasillaIngeniero2(const EstadoI &st)
+{
+  EstadoI aux = NextCasillaIngeniero(st);
+  return NextCasillaIngeniero(aux);
+}
+
+bool ComportamientoIngeniero::CasillaAccesibleIngeniero(
+    const EstadoI &st,
+    const vector<vector<unsigned char>> &terreno,
+    const vector<vector<unsigned char>> &altura)
+{
+  EstadoI next = NextCasillaIngeniero(st);
+  if (!EnRango(next.site.f, next.site.c, terreno))
+    return false;
+
+  unsigned char cas = terreno[next.site.f][next.site.c];
+  if (!EsTransitableIngeniero(cas))
+    return false;
+
+  int diff = (int)altura[next.site.f][next.site.c] - (int)altura[st.site.f][st.site.c];
+  int maxDiff = st.zapatillas ? 2 : 1;
+
+  return diff >= -maxDiff && diff <= maxDiff;
+}
+
+bool ComportamientoIngeniero::CasillaAccesibleJumpIngeniero(const EstadoI &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura)
+{
+  EstadoI inter = NextCasillaIngeniero(st);
+  EstadoI fin = NextCasillaIngeniero2(st);
+
+  if (!EnRango(inter.site.f, inter.site.c, terreno))
+    return false;
+  if (!EnRango(fin.site.f, fin.site.c, terreno))
+    return false;
+
+  unsigned char casInter = terreno[inter.site.f][inter.site.c];
+  unsigned char casFin = terreno[fin.site.f][fin.site.c];
+
+  if (!EsTransitableIngeniero(casInter))
+    return false;
+  if (!EsTransitableIngeniero(casFin))
+    return false;
+
+  int maxDiff = st.zapatillas ? 2 : 1;
+
+  int diffFin = abs((int)altura[fin.site.f][fin.site.c] - (int)altura[st.site.f][st.site.c]);
+  if (diffFin > maxDiff)
+    return false;
+
+  return true;
+}
+
+ComportamientoIngeniero::EstadoI ComportamientoIngeniero::applyI(Action accion, const EstadoI &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura)
+{
+  EstadoI next = st;
+
+  switch (accion)
+  {
+  case WALK:
+    if (CasillaAccesibleIngeniero(st, terreno, altura))
+    {
+      next = NextCasillaIngeniero(st);
+    }
+    break;
+
+  case JUMP:
+    if (CasillaAccesibleJumpIngeniero(st, terreno, altura))
+    {
+      next = NextCasillaIngeniero2(st);
+    }
+    break;
+
+  case TURN_SR:
+    next.site.brujula = (Orientacion)((next.site.brujula + 1) % 8);
+    break;
+
+  case TURN_SL:
+    next.site.brujula = (Orientacion)((next.site.brujula + 7) % 8);
+    break;
+
+  default:
+    break;
+  }
+
+  if (terreno[next.site.f][next.site.c] == 'D')
+    next.zapatillas = true;
+
+  return next;
+}
+
+list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio, const ubicacion &destino, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura)
+{
+  list<Action> path;
+  list<NodoI> frontier;
+  set<NodoI> explored;
+
+  NodoI current;
+  current.estado = inicio;
+  frontier.push_back(current);
+
+  while (!frontier.empty())
+  {
+    current = frontier.front();
+    frontier.pop_front();
+
+    if (explored.find(current) != explored.end())
+      continue;
+    explored.insert(current);
+
+    if (current.estado.site.f == destino.f &&
+        current.estado.site.c == destino.c)
+    {
+      return current.secuencia;
+    }
+
+    const Action acciones[4] = {WALK, JUMP, TURN_SR, TURN_SL};
+
+    for (Action a : acciones)
+    {
+      NodoI child;
+      child.estado = applyI(a, current.estado, terreno, altura);
+
+      if (child.estado == current.estado && (a == WALK || a == JUMP))
+        continue;
+
+      if (explored.find(child) == explored.end())
+      {
+        child.secuencia = current.secuencia;
+        child.secuencia.push_back(a);
+        frontier.push_back(child);
+      }
+    }
+  }
+
+  return path;
+}
+
+// Niveles avanzados (Uso de búsqueda)
+/**
+ * @brief Comportamiento del ingeniero para el Nivel 2 (búsqueda).
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
+Action ComportamientoIngeniero::ComportamientoIngenieroNivel_2(Sensores sensores)
+{
+  Action accion = IDLE;
+
+  if (sensores.superficie[0] == 'D')
+    tiene_zapatillas = true;
+
+  if (sensores.posF == sensores.BelPosF && sensores.posC == sensores.BelPosC)
+  {
+    hayPlan = false;
+    plan.clear();
+    return IDLE;
+  }
+
+  if (sensores.choque)
+  {
+    hayPlan = false;
+    plan.clear();
+  }
+
+  if (!hayPlan)
+  {
+    EstadoI inicio;
+    inicio.site.f = sensores.posF;
+    inicio.site.c = sensores.posC;
+    inicio.site.brujula = sensores.rumbo;
+    inicio.zapatillas = tiene_zapatillas;
+
+    ubicacion destino;
+    destino.f = sensores.BelPosF;
+    destino.c = sensores.BelPosC;
+
+    plan = B_Anchura_Ingeniero(inicio, destino, mapaResultado, mapaCotas);
+    VisualizaPlan(inicio.site, plan);
+    hayPlan = !plan.empty();
+  }
+
+  if (hayPlan && !plan.empty())
+  {
+    accion = plan.front();
+    plan.pop_front();
+  }
+  else
+  {
+    accion = IDLE;
+  }
+
+  if (plan.empty())
+    hayPlan = false;
+
+  return accion;
+}
+
+//-----------------------------------------------------------------------------
+//
+//                            FUNCIONES 3
+//
+//-----------------------------------------------------------------------------
+
+/**
+ * @brief Comportamiento del ingeniero para el Nivel 3.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
+Action ComportamientoIngeniero::ComportamientoIngenieroNivel_3(Sensores sensores)
+{
+  ubicacion actual;
+  actual.f = sensores.posF;
+  actual.c = sensores.posC;
+  actual.brujula = sensores.rumbo;
+
+  // Si el técnico está justo delante, girar para dejar de encararlo
+  if (sensores.agentes[2] == 't')
+    return TURN_SR;
+
+  // Si el técnico está en visión cercana, intentar apartarse una sola casilla
+  bool tecnico_cerca = false;
+  for (int i = 1; i < 16; i++)
+  {
+    if (sensores.agentes[i] == 't')
+    {
+      tecnico_cerca = true;
+      break;
+    }
+  }
+
+  if (tecnico_cerca)
+  {
+    ubicacion d = Delante(actual);
+
+    if (EsCasillaTransitableLevel0(d.f, d.c, tiene_zapatillas) &&
+        EsAccesiblePorAltura(actual, tiene_zapatillas) &&
+        mapaResultado[d.f][d.c] != 'P')
+    {
+      return WALK;
+    }
+
+    return TURN_SR;
+  }
+
+  return IDLE;
+}
 
 /**
  * @brief Actualiza el mapaResultado y mapaCotas con la información de los sensores.
@@ -883,6 +1231,7 @@ void ComportamientoIngeniero::VisualizaPlan(const ubicacion &st,
       if (cst.f >= 0 && cst.f < mapaResultado.size() &&
           cst.c >= 0 && cst.c < mapaResultado[0].size())
         listaPlanCasillas.push_back({cst.f, cst.c, JUMP});
+      break;
     case WALK:
       switch (cst.brujula)
       {

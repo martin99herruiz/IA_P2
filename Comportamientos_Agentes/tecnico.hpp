@@ -2,13 +2,13 @@
 #define COMPORTAMIENTOTECNICO_H
 
 #include <chrono>
-#include <time.h>
-#include <thread>
+#include <cmath>
 #include <list>
 #include <queue>
 #include <set>
+#include <thread>
+#include <time.h>
 #include <vector>
-#include <cmath>
 
 #include "comportamientos/comportamiento.hpp"
 
@@ -24,16 +24,21 @@ public:
     ultimaPosF = -1;
     ultimaPosC = -1;
     turnos_sin_avanzar = 0;
-    mapaVisitas = vector<vector<int>>(size, vector<int>(size, 0));
+    mapaVisitas = std::vector<std::vector<int>>(size, std::vector<int>(size, 0));
     mano_derecha = false;
     plan_escape = 0;
     giros_consecutivos = 0;
 
     hayPlan = false;
+
+    estado_n5 = T5_LIBRE;
+    hayObjetivoN5 = false;
+    instalar_este_turno_n5 = false;
   }
 
   ComportamientoTecnico(std::vector<std::vector<unsigned char>> mapaR,
-                        std::vector<std::vector<unsigned char>> mapaC) : Comportamiento(mapaR, mapaC)
+                        std::vector<std::vector<unsigned char>> mapaC)
+      : Comportamiento(mapaR, mapaC)
   {
     last_action = IDLE;
     tiene_zapatillas = false;
@@ -42,12 +47,16 @@ public:
     ultimaPosF = -1;
     ultimaPosC = -1;
     turnos_sin_avanzar = 0;
-    mapaVisitas = vector<vector<int>>(mapaR.size(), vector<int>(mapaR.size(), 0));
+    mapaVisitas = vector<vector<int>>(mapaR.size(), vector<int>(mapaR[0].size(), 0));
     mano_derecha = false;
     plan_escape = 0;
     giros_consecutivos = 0;
 
     hayPlan = false;
+
+    estado_n5 = T5_LIBRE;
+    hayObjetivoN5 = false;
+    instalar_este_turno_n5 = false;
   }
 
   ComportamientoTecnico(const ComportamientoTecnico &comport) : Comportamiento(comport) {}
@@ -74,9 +83,8 @@ protected:
   bool EsAccesiblePorAltura(const ubicacion &actual);
   ubicacion Delante(const ubicacion &actual) const;
   bool es_camino(unsigned char c) const;
-  void PintaPlan(const list<Action> &plan);
-  void PintaPlan(const list<Paso> &plan);
-  void VisualizaPlan(const ubicacion &st, const list<Action> &plan);
+  void PintaPlan(const std::list<Action> &plan);
+  void VisualizaPlan(const ubicacion &st, const std::list<Action> &plan);
 
 private:
   // =========================================================
@@ -85,7 +93,7 @@ private:
   struct EstadoT
   {
     ubicacion site;
-    bool zapatillas;
+    bool zapatillas = false;
 
     bool operator==(const EstadoT &other) const
     {
@@ -97,9 +105,12 @@ private:
 
     bool operator<(const EstadoT &other) const
     {
-      if (site.f != other.site.f) return site.f < other.site.f;
-      if (site.c != other.site.c) return site.c < other.site.c;
-      if (site.brujula != other.site.brujula) return site.brujula < other.site.brujula;
+      if (site.f != other.site.f)
+        return site.f < other.site.f;
+      if (site.c != other.site.c)
+        return site.c < other.site.c;
+      if (site.brujula != other.site.brujula)
+        return site.brujula < other.site.brujula;
       return zapatillas < other.zapatillas;
     }
   };
@@ -107,7 +118,7 @@ private:
   struct NodoT
   {
     EstadoT estado;
-    list<Action> secuencia;
+    std::list<Action> secuencia;
     int g; // coste acumulado de energía
     int h; // heurística
     int f; // g + h
@@ -117,10 +128,22 @@ private:
   {
     bool operator()(const NodoT &a, const NodoT &b) const
     {
-      if (a.f != b.f) return a.f > b.f;   // priority_queue mínima
-      if (a.h != b.h) return a.h > b.h;   // desempate
+      if (a.f != b.f)
+        return a.f > b.f; // priority_queue mínima
+      if (a.h != b.h)
+        return a.h > b.h; // desempate
       return a.g > b.g;
     }
+  };
+
+  // =========================================================
+  // ESTADO INTERNO NIVEL 5
+  // =========================================================
+  enum EstadoTecnicoN5
+  {
+    T5_LIBRE,
+    T5_YENDO_OBJETIVO,
+    T5_ESPERANDO_INSTALL
   };
 
   // =========================================================
@@ -135,15 +158,22 @@ private:
   int CosteEnergiaTecnico(Action accion, const EstadoT &st) const;
   int HeuristicaTecnico(const EstadoT &actual, const EstadoT &destino) const;
 
-  list<Action> AEstrellaTecnico(const EstadoT &inicio, const EstadoT &fin);
+  std::list<Action> AEstrellaTecnico(const EstadoT &inicio, const EstadoT &fin);
   bool EsDestino(const EstadoT &st, const EstadoT &fin) const;
+
+  // =========================================================
+  // FUNCIONES AUXILIARES NIVEL 5
+  // =========================================================
+  bool MismaCasilla(const ubicacion &u, int f, int c) const;
+  Orientacion OrientacionHacia(int f1, int c1, int f2, int c2) const;
+  bool EsAdyacenteOrtogonal(int f1, int c1, int f2, int c2) const;
 
   // =========================================================
   // VARIABLES DE ESTADO
   // =========================================================
   Action last_action;
   bool tiene_zapatillas;
-  vector<vector<int>> mapaVisitas;
+  std::vector<std::vector<int>> mapaVisitas;
   int ultimaFila, ultimaCol;
   int ultimaPosF, ultimaPosC;
   int turnos_sin_avanzar;
@@ -153,7 +183,13 @@ private:
 
   // Deliberativo
   bool hayPlan;
-  list<Action> plan;
+  std::list<Action> plan;
+
+  // Nivel 5
+  EstadoTecnicoN5 estado_n5;
+  ubicacion objetivo_n5;
+  bool hayObjetivoN5;
+  bool instalar_este_turno_n5;
 };
 
 #endif
