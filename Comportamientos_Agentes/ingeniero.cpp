@@ -361,6 +361,14 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
 
   bool mismaPos = (sensores.posF == ultimaPosF && sensores.posC == ultimaPosC);
 
+  // Salvaguarda suave contra bucles largos: solo tras MUCHAS revisitas
+  // de la misma casilla, invertimos mano para probar un ciclo alternativo.
+  if (mapaVisitas[sensores.posF][sensores.posC] > 35 &&
+      (mapaVisitas[sensores.posF][sensores.posC] % 20) == 0)
+  {
+    mano_derecha = !mano_derecha;
+  }
+
   int decision = ElegirMovimientoNivel0I(sensores, i, c, d, mapaVisitas, ultimaFila, ultimaCol, mano_derecha);
 
   switch (decision)
@@ -657,7 +665,7 @@ bool ComportamientoIngeniero::EnRango(int f, int c, const vector<vector<unsigned
 
 bool EsTransitableIngeniero(unsigned char cas)
 {
-  return cas == 'A' || cas == 'H' || cas == 'S' || cas == 'C' || cas == 'D' || cas == 'U' ;
+  return cas == 'A' || cas == 'H' || cas == 'S' || cas == 'C' || cas == 'D' || cas == 'U';
 }
 
 ComportamientoIngeniero::EstadoI ComportamientoIngeniero::NextCasillaIngeniero(const EstadoI &st)
@@ -791,15 +799,18 @@ list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio,
   list<Action> path;
   list<NodoI> frontier;
   set<NodoI> explored;
+  set<EstadoI> en_frontera;
 
   NodoI current;
   current.estado = inicio;
   frontier.push_back(current);
+  en_frontera.insert(inicio);
 
   while (!frontier.empty())
   {
     current = frontier.front();
     frontier.pop_front();
+    en_frontera.erase(current.estado);
 
     if (explored.find(current) != explored.end())
       continue;
@@ -811,7 +822,7 @@ list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio,
       return current.secuencia;
     }
 
-    const Action acciones[4] = {WALK, JUMP, TURN_SL, TURN_SR};
+    const Action acciones[4] = {WALK, JUMP, TURN_SR, TURN_SL};
 
     for (Action a : acciones)
     {
@@ -821,11 +832,13 @@ list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio,
       if (child.estado == current.estado && (a == WALK || a == JUMP))
         continue;
 
-      if (explored.find(child) == explored.end())
+      if (explored.find(child) == explored.end() &&
+          en_frontera.find(child.estado) == en_frontera.end())
       {
         child.secuencia = current.secuencia;
         child.secuencia.push_back(a);
         frontier.push_back(child);
+        en_frontera.insert(child.estado);
       }
     }
   }
@@ -908,32 +921,74 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_3(Sensores sensores
   actual.c = sensores.posC;
   actual.brujula = sensores.rumbo;
 
-  // Si el técnico está justo delante, girar para dejar de encararlo
-  if (sensores.agentes[2] == 't')
-    return TURN_SR;
-
-  // Si el técnico está en visión cercana, intentar apartarse una sola casilla
-  bool tecnico_cerca = false;
-  for (int i = 1; i < 16; i++)
+  auto CasillaEvasionValida = [&](int f, int c)
   {
-    if (sensores.agentes[i] == 't')
-    {
-      tecnico_cerca = true;
-      break;
-    }
-  }
+    if (f < 0 || f >= (int)mapaResultado.size() || c < 0 || c >= (int)mapaResultado[0].size())
+      return false;
 
-  if (tecnico_cerca)
+    unsigned char casilla = mapaResultado[f][c];
+    return casilla != 'P' && casilla != 'M' && casilla != '?' && casilla != 'B';
+  };
+
+  // Si estoy exactamente sobre la Belkanita, debo salir de ahí
+  if (sensores.posF == sensores.BelPosF && sensores.posC == sensores.BelPosC)
   {
     ubicacion d = Delante(actual);
 
-    if (EsCasillaTransitableLevel0(d.f, d.c, tiene_zapatillas) &&
+    if (CasillaEvasionValida(d.f, d.c) &&
+        EsAccesiblePorAltura(actual, tiene_zapatillas) &&
+        mapaResultado[d.f][d.c] != 'P')
+      return WALK;
+
+    return TURN_SR;
+  }
+
+  // Si en el turno anterior decidimos apartarnos, intentamos completar ese paso
+  // de escape antes de volver a quedarnos quietos.
+  if (plan_escape != 0)
+  {
+    ubicacion d = Delante(actual);
+    if (sensores.agentes[2] != 't' &&
+        CasillaEvasionValida(d.f, d.c) &&
         EsAccesiblePorAltura(actual, tiene_zapatillas) &&
         mapaResultado[d.f][d.c] != 'P')
     {
+      plan_escape = 0;
       return WALK;
     }
 
+    return (plan_escape > 0) ? TURN_SR : TURN_SL;
+  }
+
+  // Si el técnico es visible en cualquier sensor, apartarse
+  bool tecnicoVisible = false;
+  bool tecnicoIzquierda = false;
+  bool tecnicoDerecha = false;
+  bool tecnicoCentro = false;
+  for (int k = 1; k < 16; k++)
+  {
+    if (sensores.agentes[k] == 't')
+    {
+      tecnicoVisible = true;
+
+      if (k == 2 || k == 6 || k == 12)
+        tecnicoCentro = true;
+      else if (k == 1 || k == 4 || k == 5 || k == 9 || k == 10 || k == 11)
+        tecnicoIzquierda = true;
+      else
+        tecnicoDerecha = true;
+    }
+  }
+
+  if (tecnicoVisible)
+  {
+    if (tecnicoDerecha && !tecnicoIzquierda && !tecnicoCentro)
+    {
+      plan_escape = -1;
+      return TURN_SL;
+    }
+
+    plan_escape = 1;
     return TURN_SR;
   }
 
@@ -1077,7 +1132,7 @@ list<ComportamientoIngeniero::Paso> ComportamientoIngeniero::BuscarPlanNivel4(co
   };
 
   queue<Nodo> abiertos;
-  map<tuple<int, int, int>, pair<int, int>> mejor;
+  map<tuple<int, int, int>, vector<pair<int, int>>> etiquetas;
 
   int h0 = mapaCotas[origen.f][origen.c];
 
@@ -1102,7 +1157,7 @@ list<ComportamientoIngeniero::Paso> ComportamientoIngeniero::BuscarPlanNivel4(co
       continue;
 
     abiertos.push(ini);
-    mejor[{ini.f, ini.c, ini.h}] = {ini.installs, ini.impacto};
+    etiquetas[{ini.f, ini.c, ini.h}].push_back({ini.installs, ini.impacto});
   }
 
   while (!abiertos.empty())
@@ -1125,8 +1180,6 @@ list<ComportamientoIngeniero::Paso> ComportamientoIngeniero::BuscarPlanNivel4(co
         continue;
       if (!CasillaValidaParaTuberia(nf, nc))
         continue;
-      if (YaEnPlan(cur.plan, nf, nc))
-        continue;
 
       int hbase = mapaCotas[nf][nc];
 
@@ -1142,8 +1195,11 @@ list<ComportamientoIngeniero::Paso> ComportamientoIngeniero::BuscarPlanNivel4(co
         if (!ConexionValidaPorGravedad(cur.h, hs))
           continue;
 
+        // El validador del motor contabiliza INSTALL en ambos extremos
+        // de cada tramo (casilla previa y casilla nueva).
         int nuevoImpacto =
             cur.impacto +
+            ImpactoInstallCasilla(cur.f, cur.c) +
             ImpactoInstallCasilla(nf, nc) +
             ImpactoOperacionCasilla(nf, nc, op);
 
@@ -1159,21 +1215,34 @@ list<ComportamientoIngeniero::Paso> ComportamientoIngeniero::BuscarPlanNivel4(co
         sig.plan.push_back({nf, nc, op});
 
         auto key = make_tuple(sig.f, sig.c, sig.h);
-        auto it = mejor.find(key);
+        auto &labs = etiquetas[key];
 
-        bool merece = false;
-        if (it == mejor.end())
-          merece = true;
-        else if (sig.installs < it->second.first)
-          merece = true;
-        else if (sig.installs == it->second.first && sig.impacto < it->second.second)
-          merece = true;
-
-        if (merece)
+        // Dominancia: (a,b) domina a (x,y) si a<=x y b<=y.
+        bool dominado = false;
+        for (const auto &par : labs)
         {
-          mejor[key] = {sig.installs, sig.impacto};
-          abiertos.push(sig);
+          if (par.first <= sig.installs && par.second <= sig.impacto)
+          {
+            dominado = true;
+            break;
+          }
         }
+
+        if (dominado)
+          continue;
+
+        // Eliminar etiquetas dominadas por la nueva.
+        vector<pair<int, int>> filtradas;
+        filtradas.reserve(labs.size() + 1);
+        for (const auto &par : labs)
+        {
+          if (!(sig.installs <= par.first && sig.impacto <= par.second))
+            filtradas.push_back(par);
+        }
+        filtradas.push_back({sig.installs, sig.impacto});
+        labs.swap(filtradas);
+
+        abiertos.push(sig);
       }
     }
   }
@@ -1196,7 +1265,9 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
     origen.c = sensores.BelPosC;
     origen.brujula = sensores.rumbo;
 
-    int maxImpacto = 999999; // de momento fijo para pruebas
+    int maxImpacto = sensores.max_ecologico - sensores.ecologico;
+    if (maxImpacto < 0)
+      maxImpacto = 0;
 
     list<Paso> plan = BuscarPlanNivel4(origen, maxImpacto);
 
@@ -1267,6 +1338,52 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
   actual.c = sensores.posC;
   actual.brujula = sensores.rumbo;
 
+  auto TramoYaInstalado = [&]() -> bool
+  {
+    int fo = paso_origen_n5.fil;
+    int co = paso_origen_n5.col;
+    int fd = paso_destino_n5.fil;
+    int cd = paso_destino_n5.col;
+
+    if (fo < 0 || co < 0 || fd < 0 || cd < 0)
+      return false;
+    if (fo >= (int)mapaTuberias.size() || fd >= (int)mapaTuberias.size())
+      return false;
+    if (co >= (int)mapaTuberias[0].size() || cd >= (int)mapaTuberias[0].size())
+      return false;
+
+    unsigned char bit_o = 0;
+    unsigned char bit_d = 0;
+
+    if (fd == fo - 1 && cd == co)
+    {
+      bit_o = 1;
+      bit_d = 16;
+    } // destino al norte del origen
+    else if (fd == fo + 1 && cd == co)
+    {
+      bit_o = 16;
+      bit_d = 1;
+    } // destino al sur
+    else if (fd == fo && cd == co + 1)
+    {
+      bit_o = 4;
+      bit_d = 64;
+    } // destino al este
+    else if (fd == fo && cd == co - 1)
+    {
+      bit_o = 64;
+      bit_d = 4;
+    } // destino al oeste
+    else
+    {
+      return false; // no ortogonales
+    }
+
+    return ((mapaTuberias[fo][co] & bit_o) != 0) &&
+           ((mapaTuberias[fd][cd] & bit_d) != 0);
+  };
+
   switch (fase_n5)
   {
   case N5_PLANIFICAR:
@@ -1276,7 +1393,9 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
     origen.c = sensores.BelPosC;
     origen.brujula = sensores.rumbo;
 
-    int maxImpacto = 999999; // luego lo ajustamos al umbral real
+    int maxImpacto = sensores.max_ecologico - sensores.ecologico;
+    if (maxImpacto < 0)
+      maxImpacto = 0;
     plan_tuberias_n5 = BuscarPlanNivel4(origen, maxImpacto);
 
     if (plan_tuberias_n5.empty() || plan_tuberias_n5.size() < 2)
@@ -1284,10 +1403,25 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
       cout << "Nivel 5: no se encontro plan valido\n";
       fase_n5 = N5_TERMINADO;
       return IDLE;
-
     }
 
     cout << "Nivel 5: plan calculado\n";
+
+    // Si el primer tramo asciende, invertimos el plan completo para recorrerlo
+    // en el sentido que favorece INSTALL (Técnico en cota >= Ingeniero).
+    {
+      auto it0 = plan_tuberias_n5.begin();
+      auto it1 = it0;
+      ++it1;
+      if (it1 != plan_tuberias_n5.end())
+      {
+        int h0 = (int)mapaCotas[it0->fil][it0->col] + it0->op;
+        int h1 = (int)mapaCotas[it1->fil][it1->col] + it1->op;
+        if (h0 < h1)
+          plan_tuberias_n5.reverse();
+      }
+    }
+
     PintaPlan(plan_tuberias_n5);
     VisualizaRedTuberias(plan_tuberias_n5);
 
@@ -1312,16 +1446,18 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
     paso_origen_n5 = *it_tramo_n5;
     paso_destino_n5 = *it_sig;
 
-    // IMPORTANTE:
-    // 1) primero el Ingeniero va a la casilla donde luego debe quedar el Técnico
-    // 2) allí hace COME
-    // 3) después el Ingeniero se recoloca en la otra casilla del tramo
-    objetivo_ing_n5.f = paso_destino_n5.fil;
-    objetivo_ing_n5.c = paso_destino_n5.col;
+    // Para INSTALL, el motor exige h_ingeniero en [h_tecnico-1, h_tecnico].
+    // Con nuestra canalización por gravedad, eso se cumple si:
+    // técnico en paso_origen (más alto) e ingeniero en paso_destino (igual o más bajo).
+    // 1) Ingeniero va a paso_origen
+    // 2) allí hace COME para traer al Técnico a paso_origen
+    // 3) Ingeniero se recoloca en paso_destino para instalar
+    objetivo_ing_n5.f = paso_origen_n5.fil;
+    objetivo_ing_n5.c = paso_origen_n5.col;
     objetivo_ing_n5.brujula = actual.brujula;
 
-    objetivo_tec_n5.f = paso_destino_n5.fil;
-    objetivo_tec_n5.c = paso_destino_n5.col;
+    objetivo_tec_n5.f = paso_origen_n5.fil;
+    objetivo_tec_n5.c = paso_origen_n5.col;
     objetivo_tec_n5.brujula = actual.brujula;
 
     hay_plan_mov_n5 = false;
@@ -1393,20 +1529,20 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
 
   case N5_LLAMAR_TECNICO:
   {
-    // Primero ajustamos la casilla donde debe quedar el Técnico si hiciera falta
-    if (!terreno_ajustado_n5 && paso_destino_n5.op != 0)
+    // Ajustamos primero la casilla donde quedará el Técnico (paso_origen)
+    if (!terreno_ajustado_n5 && paso_origen_n5.op != 0)
     {
       terreno_ajustado_n5 = true;
-      return (paso_destino_n5.op == 1) ? RAISE : DIG;
+      return (paso_origen_n5.op == 1) ? RAISE : DIG;
     }
 
     // Ahora sí: COME envía al Técnico a la casilla actual del Ingeniero
     tecnico_convocado_n5 = true;
     terreno_ajustado_n5 = false;
 
-    // Tras COME, el Ingeniero debe recolocarse en la otra casilla del tramo
-    objetivo_ing_n5.f = paso_origen_n5.fil;
-    objetivo_ing_n5.c = paso_origen_n5.col;
+    // Tras COME, el Ingeniero se recoloca en paso_destino para instalar
+    objetivo_ing_n5.f = paso_destino_n5.fil;
+    objetivo_ing_n5.c = paso_destino_n5.col;
     objetivo_ing_n5.brujula = actual.brujula;
 
     fase_n5 = N5_IR_A_POSICION_ING;
@@ -1415,12 +1551,12 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
 
   case N5_AJUSTAR_TERRENO:
   {
-    // Ahora el Ingeniero ya está en la otra casilla del tramo.
-    // Ajusta su propia casilla si hiciera falta antes de instalar.
-    if (!terreno_ajustado_n5 && paso_origen_n5.op != 0)
+    // Ahora el Ingeniero ya está en paso_destino.
+    // Ajusta su casilla antes de instalar.
+    if (!terreno_ajustado_n5 && paso_destino_n5.op != 0)
     {
       terreno_ajustado_n5 = true;
-      return (paso_origen_n5.op == 1) ? RAISE : DIG;
+      return (paso_destino_n5.op == 1) ? RAISE : DIG;
     }
 
     fase_n5 = N5_ESPERAR_TECNICO;
@@ -1429,49 +1565,49 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
 
   case N5_ESPERAR_TECNICO:
   {
+    // Solo avanzamos de tramo cuando la conexión ya existe de verdad en el mapa.
+    if (TramoYaInstalado())
+    {
+      fase_n5 = N5_SIGUIENTE_TRAMO;
+      return IDLE;
+    }
+
     // Si ya están perfectamente enfrentados, este es el turno de instalar.
     if (sensores.enfrente)
     {
-      fase_n5 = N5_SIGUIENTE_TRAMO;
       return INSTALL;
     }
 
-    // Si el técnico está justo delante, yo ya estoy orientado hacia él.
-    if (sensores.agentes[2] == 't')
-      return IDLE;
-
-    // Si lo veo a izquierda/derecha inmediata, paso a alinear.
-    if (sensores.agentes[1] == 't' || sensores.agentes[3] == 't')
+    // Alinear de forma determinista hacia la casilla esperada del Técnico,
+    // aunque no esté en el cono frontal inmediato.
+    if (EsAdyacenteOrtogonal(sensores.posF, sensores.posC,
+                             paso_origen_n5.fil, paso_origen_n5.col))
     {
-      fase_n5 = N5_ALINEAR;
-      return IDLE;
+      Orientacion objetivo = OrientacionHacia(sensores.posF, sensores.posC,
+                                              paso_origen_n5.fil, paso_origen_n5.col);
+      if (sensores.rumbo != objetivo)
+      {
+        int diff = ((int)objetivo - (int)sensores.rumbo + 8) % 8;
+        return (diff <= 4) ? TURN_SR : TURN_SL;
+      }
     }
 
-    // Si aún no ha llegado, esperar.
+    // Si aún no hay visibilidad/alineación completa, esperar.
     espera_tecnico_n5++;
-
-      if (espera_tecnico_n5 > 40)
-    {
-      cout << "[ING N5] tecnico tarda demasiado, reprocesando tramo\n";
-      fase_n5 = N5_PREPARAR_TRAMO;
-      hay_plan_mov_n5 = false;
-      plan_mov_n5.clear();
-      return IDLE;
-    }
     return IDLE;
   }
 
   case N5_ALINEAR:
   {
     if (!EsAdyacenteOrtogonal(sensores.posF, sensores.posC,
-                              paso_destino_n5.fil, paso_destino_n5.col))
+                              paso_origen_n5.fil, paso_origen_n5.col))
     {
       fase_n5 = N5_ESPERAR_TECNICO;
       return IDLE;
     }
 
     Orientacion objetivo = OrientacionHacia(sensores.posF, sensores.posC,
-                                            paso_destino_n5.fil, paso_destino_n5.col);
+                                            paso_origen_n5.fil, paso_origen_n5.col);
 
     if (sensores.rumbo == objetivo)
     {
@@ -1509,7 +1645,48 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
  */
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores)
 {
-  return IDLE;
+  // Nivel 6: primero explorar (hay niebla), después reutilizar la
+  // coordinación de instalación de nivel 5 cuando exista un plan válido.
+  ActualizarMapa(sensores);
+
+  bool hayUConocida = false;
+  for (int f = 0; f < (int)mapaResultado.size() && !hayUConocida; f++)
+    for (int c = 0; c < (int)mapaResultado[f].size(); c++)
+      if (mapaResultado[f][c] == 'U')
+      {
+        hayUConocida = true;
+        break;
+      }
+
+  if (!hayUConocida)
+    return ComportamientoIngenieroNivel_1(sensores);
+
+  ubicacion origen;
+  origen.f = sensores.BelPosF;
+  origen.c = sensores.BelPosC;
+  origen.brujula = sensores.rumbo;
+
+  int maxImpacto = sensores.max_ecologico - sensores.ecologico;
+  if (maxImpacto < 0)
+    maxImpacto = 0;
+
+  list<Paso> candidato = BuscarPlanNivel4(origen, maxImpacto);
+
+  // Si ya hay suficiente mapa conocido para planificar tuberías, activar N5.
+  if (!candidato.empty() && candidato.size() >= 2)
+  {
+    if (fase_n5 == N5_TERMINADO || !plan_n5_inicializado)
+    {
+      fase_n5 = N5_PLANIFICAR;
+      plan_n5_inicializado = false;
+      hay_plan_mov_n5 = false;
+      plan_mov_n5.clear();
+    }
+    return ComportamientoIngenieroNivel_5(sensores);
+  }
+
+  // Aún no hay plan: explorar para descubrir terreno/cotas/U.
+  return ComportamientoIngenieroNivel_1(sensores);
 }
 
 // =========================================================================
