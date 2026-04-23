@@ -728,7 +728,8 @@ bool ComportamientoIngeniero::EnRango(int f, int c, const vector<vector<unsigned
 
 bool EsTransitableIngeniero(unsigned char cas)
 {
-  return cas == 'A' || cas == 'H' || cas == 'S' || cas == 'C' || cas == 'D' || cas == 'U';
+  return cas == 'A' || cas == 'H' || cas == 'S' || cas == 'C' ||
+         cas == 'D' || cas == 'U' || cas == 'X';
 }
 
 ComportamientoIngeniero::EstadoI ComportamientoIngeniero::NextCasillaIngeniero(const EstadoI &st)
