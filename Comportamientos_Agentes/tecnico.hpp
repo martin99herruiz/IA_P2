@@ -35,6 +35,7 @@ public:
     hayObjetivoN5 = false;
     instalar_este_turno_n5 = false;
     espera_giro_n5 = 0;
+    bloqueos_frente_n5 = 0;
   }
 
   ComportamientoTecnico(std::vector<std::vector<unsigned char>> mapaR,
@@ -59,6 +60,7 @@ public:
     hayObjetivoN5 = false;
     instalar_este_turno_n5 = false;
     espera_giro_n5 = 0;
+    bloqueos_frente_n5 = 0;
   }
 
   ComportamientoTecnico(const ComportamientoTecnico &comport) : Comportamiento(comport) {}
@@ -193,6 +195,7 @@ private:
   bool hayObjetivoN5;
   bool instalar_este_turno_n5;
   int espera_giro_n5;
+  int bloqueos_frente_n5;
 };
 
 #endif

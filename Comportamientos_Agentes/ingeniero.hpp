@@ -82,6 +82,18 @@ public:
     tecnico_convocado_n5 = false;
     tecnico_en_posicion_n5 = false;
     tramo_instalado_n5 = false;
+    operacion_aplicada_n5 = std::vector<std::vector<bool>>(size, std::vector<bool>(size, false));
+
+    n6_ejecutando_n5 = false;
+    n6_cooldown_reintento = 0;
+    n6_desconocidas_ultimo_fallo = -1;
+    n6_buscando_bel = true;
+    n6_pasos_busca_bel = 0;
+    n6_dist_inicial_bel = -1;
+    n6_cooldown_frontier = 0;
+    n6_cooldown_plan4 = 0;
+    n6_desconocidas_ultimo_plan4 = -1;
+    n6_rescates_altura_n5 = 0;
   }
 
   ComportamientoIngeniero(std::vector<std::vector<unsigned char>> mapaR,
@@ -111,6 +123,18 @@ public:
     tecnico_convocado_n5 = false;
     tecnico_en_posicion_n5 = false;
     tramo_instalado_n5 = false;
+    operacion_aplicada_n5 = std::vector<std::vector<bool>>(mapaR.size(), std::vector<bool>(mapaR[0].size(), false));
+
+    n6_ejecutando_n5 = false;
+    n6_cooldown_reintento = 0;
+    n6_desconocidas_ultimo_fallo = -1;
+    n6_buscando_bel = true;
+    n6_pasos_busca_bel = 0;
+    n6_dist_inicial_bel = -1;
+    n6_cooldown_frontier = 0;
+    n6_cooldown_plan4 = 0;
+    n6_desconocidas_ultimo_plan4 = -1;
+    n6_rescates_altura_n5 = 0;
   }
 
   ComportamientoIngeniero(const ComportamientoIngeniero &comport)
@@ -285,8 +309,21 @@ private:
   bool tecnico_convocado_n5;
   bool tecnico_en_posicion_n5;
   bool tramo_instalado_n5;
+  std::vector<std::vector<bool>> operacion_aplicada_n5;
 
   int espera_tecnico_n5;
+
+  // Nivel 6
+  bool n6_ejecutando_n5;
+  int n6_cooldown_reintento;
+  int n6_desconocidas_ultimo_fallo;
+  bool n6_buscando_bel;
+  int n6_pasos_busca_bel;
+  int n6_dist_inicial_bel;
+  int n6_cooldown_frontier;
+  int n6_cooldown_plan4;
+  int n6_desconocidas_ultimo_plan4;
+  int n6_rescates_altura_n5;
 };
 
 #endif

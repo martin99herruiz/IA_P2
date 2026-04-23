@@ -7,6 +7,26 @@
 
 using namespace std;
 
+namespace
+{
+constexpr bool DEBUG_N5_TRACE_TEC = false;
+
+const char *NombreEstadoT5(int st)
+{
+  switch (st)
+  {
+  case 0:
+    return "LIBRE";
+  case 1:
+    return "YENDO_OBJETIVO";
+  case 2:
+    return "ESPERANDO_INSTALL";
+  default:
+    return "?";
+  }
+}
+} // namespace
+
 // =========================================================================
 // ÁREA DE IMPLEMENTACIÓN DEL ESTUDIANTE
 // =========================================================================
@@ -591,13 +611,19 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_1(Sensores sensores)
   pair<int, int> pc = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 2);
   pair<int, int> pd = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 3);
 
-  unsigned char mi = mapaResultado[pi.first][pi.second];
-  unsigned char mc = mapaResultado[pc.first][pc.second];
-  unsigned char md = mapaResultado[pd.first][pd.second];
+  auto enRangoN1 = [&](pair<int, int> p)
+  {
+    return p.first >= 0 && p.first < (int)mapaResultado.size() &&
+           p.second >= 0 && p.second < (int)mapaResultado[0].size();
+  };
 
-  int vi = mapaVisitas[pi.first][pi.second];
-  int vc = mapaVisitas[pc.first][pc.second];
-  int vd = mapaVisitas[pd.first][pd.second];
+  unsigned char mi = enRangoN1(pi) ? mapaResultado[pi.first][pi.second] : 'P';
+  unsigned char mc = enRangoN1(pc) ? mapaResultado[pc.first][pc.second] : 'P';
+  unsigned char md = enRangoN1(pd) ? mapaResultado[pd.first][pd.second] : 'P';
+
+  int vi = enRangoN1(pi) ? mapaVisitas[pi.first][pi.second] : 999999;
+  int vc = enRangoN1(pc) ? mapaVisitas[pc.first][pc.second] : 999999;
+  int vd = enRangoN1(pd) ? mapaVisitas[pd.first][pd.second] : 999999;
 
   ActualizarMapa(sensores);
   mapaVisitas[sensores.posF][sensores.posC]++;
@@ -1072,79 +1098,97 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_3(Sensores sensores)
    * @param sensores Datos actuales de los sensores.
    * @return Acción a realizar.
    */
-  Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores)
-  {
-    Action accion = IDLE;
+Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores)
+{
+  ActualizarMapa(sensores);
 
-    if (sensores.superficie[0] == 'D')
-      tiene_zapatillas = true;
+  if (DEBUG_N5_TRACE_TEC)
+  {
+    static bool init_dbg = false;
+    static EstadoTecnicoN5 ultimo_estado_dbg = T5_LIBRE;
+
+    if (!init_dbg || ultimo_estado_dbg != estado_n5)
+    {
+      cout << "[N5-TEC-ESTADO] t=" << sensores.tiempo
+           << " estado=" << NombreEstadoT5((int)estado_n5)
+           << " pos=(" << sensores.posF << "," << sensores.posC << ")"
+           << " obj=(" << objetivo_n5.f << "," << objetivo_n5.c << ")"
+           << " hayObj=" << hayObjetivoN5 << "\n";
+      init_dbg = true;
+      ultimo_estado_dbg = estado_n5;
+    }
+  }
+
+  if (sensores.superficie[0] == 'D')
+    tiene_zapatillas = true;
 
     ubicacion actual;
     actual.f = sensores.posF;
     actual.c = sensores.posC;
     actual.brujula = sensores.rumbo;
 
-    // Si hubo reset, reiniciar estado interno.
     if (sensores.reset)
     {
       hayPlan = false;
       plan.clear();
       estado_n5 = T5_LIBRE;
       hayObjetivoN5 = false;
+      espera_giro_n5 = 0;
+      bloqueos_frente_n5 = 0;
       return IDLE;
     }
 
-    // Si el ingeniero me llama, actualizo objetivo
-    if (sensores.venpaca)
-    {
-      objetivo_n5.f = sensores.GotoF;
-      objetivo_n5.c = sensores.GotoC;
+    // El Ingeniero envía COME: actualizar objetivo y estado.
+  if (sensores.venpaca)
+  {
+    objetivo_n5.f = sensores.GotoF;
+    objetivo_n5.c = sensores.GotoC;
       objetivo_n5.brujula = sensores.rumbo;
-
       hayObjetivoN5 = true;
+      espera_giro_n5 = 0;
+      hayPlan = false;
+      plan.clear();
+      bloqueos_frente_n5 = 0;
 
-      if (MismaCasilla(actual, objetivo_n5.f, objetivo_n5.c))
-      {
-        hayPlan = false;
-        plan.clear();
-        estado_n5 = T5_ESPERANDO_INSTALL;
-      }
-      else
-      {
-        estado_n5 = T5_YENDO_OBJETIVO;
-        hayPlan = false;
-        plan.clear();
-      }
+    if (MismaCasilla(actual, objetivo_n5.f, objetivo_n5.c))
+      estado_n5 = T5_ESPERANDO_INSTALL;
+    else
+      estado_n5 = T5_YENDO_OBJETIVO;
+
+    if (DEBUG_N5_TRACE_TEC)
+    {
+      cout << "[N5-TEC-COME] t=" << sensores.tiempo
+           << " goto=(" << objetivo_n5.f << "," << objetivo_n5.c << ")"
+           << " pos=(" << sensores.posF << "," << sensores.posC << ")"
+           << " estado=" << NombreEstadoT5((int)estado_n5) << "\n";
     }
+  }
 
-    // Choque: invalida el plan actual, pero mantenemos objetivo y estado.
+    // Choque: invalida el plan, mantiene objetivo y estado.
     if (sensores.choque)
     {
       hayPlan = false;
       plan.clear();
-
-      if (estado_n5 == T5_ESPERANDO_INSTALL && sensores.enfrente)
-        return INSTALL;
     }
 
-    // Si estoy yendo al objetivo marcado por el Ingeniero
+    // Navegar hacia el objetivo marcado por el Ingeniero.
     if (estado_n5 == T5_YENDO_OBJETIVO && hayObjetivoN5)
     {
-      if (sensores.enfrente)
-      {
+    if (MismaCasilla(actual, objetivo_n5.f, objetivo_n5.c))
+    {
+      hayPlan = false;
+      plan.clear();
         estado_n5 = T5_ESPERANDO_INSTALL;
-        hayPlan = false;
-        plan.clear();
-        return INSTALL;
-      }
+        espera_giro_n5 = 0;
+        bloqueos_frente_n5 = 0;
 
-      if (MismaCasilla(actual, objetivo_n5.f, objetivo_n5.c))
+      if (DEBUG_N5_TRACE_TEC)
       {
-        hayPlan = false;
-        plan.clear();
-        estado_n5 = T5_ESPERANDO_INSTALL;
-        return IDLE;
+        cout << "[N5-TEC-OBJ] t=" << sensores.tiempo
+             << " alcanzado=(" << objetivo_n5.f << "," << objetivo_n5.c << ")\n";
       }
+      return IDLE;
+    }
 
       if (!hayPlan)
       {
@@ -1153,78 +1197,152 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_3(Sensores sensores)
         inicio.site.c = sensores.posC;
         inicio.site.brujula = sensores.rumbo;
         inicio.zapatillas = tiene_zapatillas;
-
         fin.site.f = objetivo_n5.f;
         fin.site.c = objetivo_n5.c;
         fin.site.brujula = sensores.rumbo;
         fin.zapatillas = false;
 
-        plan = AEstrellaTecnico(inicio, fin);
-        hayPlan = !plan.empty();
+        int bloque_f = -1, bloque_c = -1;
+        for (int idx = 1; idx <= 3; idx++)
+        {
+          if (sensores.agentes[idx] == 'i')
+          {
+            auto p = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, idx);
+            bloque_f = p.first;
+            bloque_c = p.second;
+            break;
+          }
+        }
 
+        bool bloqueo_temporal = (bloque_f >= 0 && bloque_c >= 0 &&
+                                 !(bloque_f == objetivo_n5.f && bloque_c == objetivo_n5.c));
+        unsigned char backup_bloqueo = '?';
+        if (bloqueo_temporal)
+        {
+          backup_bloqueo = mapaResultado[bloque_f][bloque_c];
+          mapaResultado[bloque_f][bloque_c] = 'M';
+        }
+
+        plan = AEstrellaTecnico(inicio, fin);
+
+        if (bloqueo_temporal)
+          mapaResultado[bloque_f][bloque_c] = backup_bloqueo;
+
+        hayPlan = !plan.empty();
         if (hayPlan)
           VisualizaPlan(inicio.site, plan);
         else
+        {
+          if (sensores.nivel == 6)
+            return ComportamientoTecnicoNivel_1(sensores);
           return IDLE;
+        }
+
+        if (DEBUG_N5_TRACE_TEC)
+        {
+          cout << "[N5-TEC-PLAN] t=" << sensores.tiempo
+               << " acciones=" << plan.size()
+               << " desde=(" << sensores.posF << "," << sensores.posC << ")"
+               << " hasta=(" << objetivo_n5.f << "," << objetivo_n5.c << ")"
+               << " rumbo=" << sensores.rumbo
+               << " ag1=" << sensores.agentes[1]
+               << " ag2=" << sensores.agentes[2]
+               << " ag3=" << sensores.agentes[3] << "\n";
+        }
       }
 
-      // Si el Ingeniero bloquea la casilla frontal, romper la colisión
-      // y forzar un replanteamiento desde otro ángulo.
+      // Esperar si el Ingeniero bloquea la casilla frontal.
       if (!plan.empty() && plan.front() == WALK && sensores.agentes[2] == 'i')
       {
-        // El Ingeniero bloquea momentáneamente el paso: esperar sin gastar energía.
-        return IDLE;
-      }
-
-      accion = plan.front();
-      plan.pop_front();
-
-      if (plan.empty())
+        if (DEBUG_N5_TRACE_TEC)
+        {
+          cout << "[N5-TEC-BLOQ] t=" << sensores.tiempo
+               << " pos=(" << sensores.posF << "," << sensores.posC << ")"
+               << " rumbo=" << sensores.rumbo
+               << " bloqueos=" << (bloqueos_frente_n5 + 1) << "\n";
+        }
         hayPlan = false;
-
-      return accion;
-    }
-
-    // Si ya estoy en espera de instalación
-    if (estado_n5 == T5_ESPERANDO_INSTALL)
-    {
-      if (sensores.enfrente)
-      {
-        espera_giro_n5 = 0;
-        return INSTALL;
-      }
-
-      if (sensores.agentes[2] == 'i')
-      {
-        espera_giro_n5 = 0;
+        plan.clear();
+        bloqueos_frente_n5++;
         return IDLE;
       }
 
-      if (sensores.agentes[1] == 'i')
+      if (!plan.empty())
       {
-        espera_giro_n5 = 0;
-        return TURN_SL;
+        Action accion = plan.front();
+
+        // En nivel 6 el plan puede atravesar celdas aún no bien conocidas.
+        // Antes de ejecutar WALK, validar con los sensores actuales para
+        // evitar caídas por desnivel no previsto.
+        if (accion == WALK)
+        {
+          char frente = ViablePorAlturaT(sensores.superficie[2],
+                                         sensores.cota[2] - sensores.cota[0],
+                                         tiene_zapatillas);
+          if (frente == 'P' || sensores.agentes[2] == 'i')
+          {
+            hayPlan = false;
+            plan.clear();
+            if (sensores.nivel == 6)
+              return ComportamientoTecnicoNivel_1(sensores);
+            return IDLE;
+          }
+        }
+
+        plan.pop_front();
+        if (plan.empty()) hayPlan = false;
+        if (accion != TURN_SL && accion != TURN_SR)
+          bloqueos_frente_n5 = 0;
+        return accion;
       }
 
-      if (sensores.agentes[3] == 'i')
-      {
-        espera_giro_n5 = 0;
-        return TURN_SR;
-      }
-
-      // Si no lo veo en el cono frontal, girar de forma periódica
-      // para recuperar encaramiento sin quemar batería.
-      espera_giro_n5++;
-      if (espera_giro_n5 >= 4)
-      {
-        espera_giro_n5 = 0;
-        return TURN_SR;
-      }
       return IDLE;
     }
 
+    // Esperar posición de instalación y ejecutar INSTALL.
+  if (estado_n5 == T5_ESPERANDO_INSTALL)
+  {
+    // Condición perfecta: emitir INSTALL y volver a esperar nuevo COME.
     if (sensores.enfrente)
+    {
+      if (DEBUG_N5_TRACE_TEC)
+      {
+        cout << "[N5-TEC-INSTALL] t=" << sensores.tiempo
+             << " pos=(" << sensores.posF << "," << sensores.posC << ")"
+             << " frente=1\n";
+      }
+      estado_n5 = T5_LIBRE;
+      espera_giro_n5 = 0;
       return INSTALL;
+    }
+
+      // Ingeniero justo enfrente pero no enfrentados aún: esperar a que gire.
+    if (sensores.agentes[2] == 'i')
+      return IDLE;
+
+      // Ingeniero visible en diagonal izquierda: girar a la izquierda.
+      if (sensores.agentes[1] == 'i')
+        return TURN_SL;
+
+      // Ingeniero visible en diagonal derecha: girar a la derecha.
+    if (sensores.agentes[3] == 'i')
+      return TURN_SR;
+
+    // Ingeniero no visible: rotar un paso por turno para encontrarlo.
+    if (DEBUG_N5_TRACE_TEC)
+    {
+      if (((int)sensores.tiempo % 100) == 0)
+      {
+        cout << "[N5-TEC-WAIT] t=" << sensores.tiempo
+             << " pos=(" << sensores.posF << "," << sensores.posC << ")"
+             << " ag1=" << sensores.agentes[1]
+             << " ag2=" << sensores.agentes[2]
+             << " ag3=" << sensores.agentes[3]
+             << " enfrente=" << sensores.enfrente << "\n";
+      }
+    }
+    return TURN_SR;
+  }
 
     return IDLE;
   }
@@ -1235,6 +1353,8 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_3(Sensores sensores)
    */
   Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores)
   {
+    ActualizarMapa(sensores);
+
     // En nivel 6 mantenemos al técnico en ahorro hasta que haya coordinación
     // explícita del Ingeniero (COME/objetivo), momento en el que se usa N5.
     if (sensores.venpaca || estado_n5 != T5_LIBRE || hayObjetivoN5)
