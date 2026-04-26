@@ -94,6 +94,7 @@ public:
     n6_cooldown_plan4 = 0;
     n6_desconocidas_ultimo_plan4 = -1;
     n6_rescates_altura_n5 = 0;
+    n6_rescates_mov_n5 = 0;
   }
 
   ComportamientoIngeniero(std::vector<std::vector<unsigned char>> mapaR,
@@ -135,6 +136,7 @@ public:
     n6_cooldown_plan4 = 0;
     n6_desconocidas_ultimo_plan4 = -1;
     n6_rescates_altura_n5 = 0;
+    n6_rescates_mov_n5 = 0;
   }
 
   ComportamientoIngeniero(const ComportamientoIngeniero &comport)
@@ -324,6 +326,7 @@ private:
   int n6_cooldown_plan4;
   int n6_desconocidas_ultimo_plan4;
   int n6_rescates_altura_n5;
+  int n6_rescates_mov_n5;
 };
 
 #endif

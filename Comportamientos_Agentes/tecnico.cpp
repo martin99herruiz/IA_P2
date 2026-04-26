@@ -464,18 +464,6 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
   if (ingenieroDer)
     d = 'P';
 
-  bool ingenieroCerca = ingenieroIzq || ingenieroCen || ingenieroDer;
-
-  if (ingenieroCerca)
-  {
-    if (i == 'U')
-      i = 'P';
-    if (c == 'U')
-      c = 'P';
-    if (d == 'U')
-      d = 'P';
-  }
-
   if (sensores.choque && last_action == WALK)
   {
     accion = mano_derecha ? TURN_SR : TURN_SL;
@@ -574,7 +562,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
  */
 bool ComportamientoTecnico::es_camino(unsigned char c) const
 {
-  return (c == 'C' || c == 'S' || c == 'D' || c == 'U');
+  return (c == 'C' || c == 'D' || c == 'U');
 }
 
 /**
@@ -1363,7 +1351,8 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores)
     if (sensores.enfrente)
       return INSTALL;
 
-    return IDLE;
+    // Mientras espera coordinación, recolecta ítems como en nivel 1
+    return ComportamientoTecnicoNivel_1(sensores);
   }
 
   // =========================================================================
@@ -1557,7 +1546,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores)
   {
     if (f < 0 || f >= mapaResultado.size() || c < 0 || c >= mapaResultado[0].size())
       return false;
-    return es_camino(mapaResultado[f][c]); // Solo 'C', 'S', 'D', 'U' son transitables en Nivel 0
+    return es_camino(mapaResultado[f][c]); // Solo 'C', 'D', 'U' son transitables en Nivel 0
   }
 
   /**

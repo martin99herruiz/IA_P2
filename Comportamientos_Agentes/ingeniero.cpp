@@ -373,8 +373,36 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   if (sensores.superficie[0] == 'D')
     tiene_zapatillas = true;
 
+  bool mismaPosicion = (sensores.posF == ultimaPosF && sensores.posC == ultimaPosC);
+
+  if (mismaPosicion && last_action != IDLE)
+    turnos_sin_avanzar++;
+  else
+    turnos_sin_avanzar = 0;
+
+  if ((sensores.choque && last_action == WALK) || turnos_sin_avanzar >= 6)
+  {
+    plan_escape = 2;
+    turnos_sin_avanzar = 0;
+  }
+
+  if (plan_escape > 0)
+  {
+    plan_escape--;
+    accion = TURN_SR;
+    last_action = accion;
+    ultimaPosF = sensores.posF;
+    ultimaPosC = sensores.posC;
+    return accion;
+  }
+
   if (sensores.superficie[0] == 'U')
+  {
+    last_action = IDLE;
+    ultimaPosF = sensores.posF;
+    ultimaPosC = sensores.posC;
     return IDLE;
+  }
 
   ubicacion actual;
   actual.f = sensores.posF;
@@ -432,22 +460,60 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     mano_derecha = !mano_derecha;
   }
 
-  int decision = ElegirMovimientoNivel0I(sensores, i, c, d, mapaVisitas, ultimaFila, ultimaCol, mano_derecha);
+  bool conflictoFrontal = (sensores.agentes[2] == 't');
+  bool choqueTrasAvanzar = (sensores.choque && last_action == WALK);
 
-  switch (decision)
+  if (conflictoFrontal || choqueTrasAvanzar)
   {
-  case 2:
-    accion = WALK;
-    break;
-  case 1:
-    accion = TURN_SL;
-    break;
-  case 3:
-    accion = TURN_SR;
-    break;
-  default:
-    accion = mano_derecha ? TURN_SR : TURN_SL;
-    break;
+    int vi = 999999, vd = 999999;
+    unsigned char mi = 'P', md = 'P';
+
+    auto enRango = [&](pair<int, int> p)
+    {
+      return p.first >= 0 && p.first < (int)mapaVisitas.size() &&
+             p.second >= 0 && p.second < (int)mapaVisitas[0].size();
+    };
+
+    if (enRango({posI.f, posI.c}))
+    {
+      vi = mapaVisitas[posI.f][posI.c];
+      mi = mapaResultado[posI.f][posI.c];
+    }
+
+    if (enRango({posD.f, posD.c}))
+    {
+      vd = mapaVisitas[posD.f][posD.c];
+      md = mapaResultado[posD.f][posD.c];
+    }
+
+    int giro = MejorGiroSegunMapaI(i, d, vi, vd, mi, md, last_action);
+
+    if (giro == 1)
+      accion = TURN_SL;
+    else if (giro == 3)
+      accion = TURN_SR;
+    else
+      accion = mano_derecha ? TURN_SR : TURN_SL;
+  }
+  else
+  {
+    int decision = ElegirMovimientoNivel0I(sensores, i, c, d, mapaVisitas, ultimaFila, ultimaCol, mano_derecha);
+
+    switch (decision)
+    {
+    case 2:
+      accion = WALK;
+      break;
+    case 1:
+      accion = TURN_SL;
+      break;
+    case 3:
+      accion = TURN_SR;
+      break;
+    default:
+      accion = mano_derecha ? TURN_SR : TURN_SL;
+      break;
+    }
   }
 
   if (mismaPos)
@@ -1595,8 +1661,9 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
     tecnico_convocado_n5 = false;
     tecnico_en_posicion_n5 = false;
     tramo_instalado_n5 = false;
-    terreno_ajustado_n5 = false;
-    espera_tecnico_n5 = 0;
+	    terreno_ajustado_n5 = false;
+	    espera_tecnico_n5 = 0;
+	    n6_rescates_mov_n5 = 0;
 
     fase_n5 = N5_IR_A_POSICION_ING;
     return IDLE;
@@ -1671,11 +1738,77 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
              << " zap=" << tiene_zapatillas << "\n";
       }
 
-      if (!hay_plan_mov_n5)
-      {
-        // Ajuste de rescate local cuando solo falta corregir desnivel con
-        // la casilla objetivo inmediata.
-        if (EsAdyacenteOrtogonal(actual.f, actual.c, objetivo_ing_n5.f, objetivo_ing_n5.c))
+	      if (!hay_plan_mov_n5)
+	      {
+	        auto avance_local_ingeniero_n6 = [&]() -> Action
+	        {
+	          if (sensores.nivel != 6 || n6_rescates_mov_n5 >= 18)
+	            return IDLE;
+
+	          pair<int, int> pi = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 1);
+	          pair<int, int> pc = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 2);
+	          pair<int, int> pd = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 3);
+
+	          auto viable = [&](pair<int, int> p, int idx, unsigned char agente) -> bool
+	          {
+	            if (agente == 't')
+	              return false;
+	            if (!DentroMapa(p.first, p.second))
+	              return false;
+	            if (!EsTransitableIngeniero(sensores.superficie[idx]))
+	              return false;
+	            char porAltura = ViablePorAlturaI(sensores.superficie[idx],
+	                                              sensores.cota[idx] - sensores.cota[0],
+	                                              tiene_zapatillas);
+	            return porAltura != 'P';
+	          };
+
+	          auto puntuar = [&](pair<int, int> p, int idx, unsigned char agente, bool centro) -> int
+	          {
+	            if (!viable(p, idx, agente))
+	              return 1000000;
+	            int dist = abs(objetivo_ing_n5.f - p.first) + abs(objetivo_ing_n5.c - p.second);
+	            int visitas = mapaVisitas[p.first][p.second];
+	            int score = dist * 20 + visitas * 4;
+	            if (p.first == ultimaFila && p.second == ultimaCol)
+	              score += 30;
+	            if (centro)
+	              score -= 5;
+	            return score;
+	          };
+
+	          int dist_actual = abs(objetivo_ing_n5.f - sensores.posF) +
+	                            abs(objetivo_ing_n5.c - sensores.posC);
+	          int sC = puntuar(pc, 2, sensores.agentes[2], true);
+	          int sI = puntuar(pi, 1, sensores.agentes[1], false);
+	          int sD = puntuar(pd, 3, sensores.agentes[3], false);
+
+	          int mejor = min(sC, min(sI, sD));
+	          if (mejor >= 1000000)
+	            return IDLE;
+
+	          int mejorDist = 1000000;
+	          if (mejor == sC)
+	            mejorDist = abs(objetivo_ing_n5.f - pc.first) + abs(objetivo_ing_n5.c - pc.second);
+	          else if (mejor == sI)
+	            mejorDist = abs(objetivo_ing_n5.f - pi.first) + abs(objetivo_ing_n5.c - pi.second);
+	          else
+	            mejorDist = abs(objetivo_ing_n5.f - pd.first) + abs(objetivo_ing_n5.c - pd.second);
+
+	          if (mejorDist > dist_actual + 1)
+	            return IDLE;
+
+	          n6_rescates_mov_n5++;
+	          if (mejor == sC)
+	            return WALK;
+	          if (mejor == sI)
+	            return TURN_SL;
+	          return TURN_SR;
+	        };
+
+	        // Ajuste de rescate local cuando solo falta corregir desnivel con
+	        // la casilla objetivo inmediata.
+	        if (EsAdyacenteOrtogonal(actual.f, actual.c, objetivo_ing_n5.f, objetivo_ing_n5.c))
         {
           auto puede_rescate_n6 = [&]() -> bool
           {
@@ -1721,11 +1854,15 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
                    << " obj=(" << objetivo_ing_n5.f << "," << objetivo_ing_n5.c << ")\n";
             }
             return RAISE;
-          }
-        }
+	          }
+	        }
 
-        cout << "Nivel 5: el Ingeniero no puede alcanzar su posicion objetivo\n";
-        fase_n5 = N5_TERMINADO;
+	        Action local_n6 = avance_local_ingeniero_n6();
+	        if (local_n6 != IDLE)
+	          return local_n6;
+
+	        cout << "Nivel 5: el Ingeniero no puede alcanzar su posicion objetivo\n";
+	        fase_n5 = N5_TERMINADO;
         return IDLE;
       }
 
@@ -1931,13 +2068,14 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores
     n6_buscando_bel = true;
     n6_pasos_busca_bel = 0;
     n6_dist_inicial_bel = -1;
-    n6_cooldown_frontier = 0;
-    n6_cooldown_plan4 = 0;
-    n6_desconocidas_ultimo_plan4 = -1;
-    n6_rescates_altura_n5 = 0;
-    hayPlan = false;
-    plan.clear();
-  }
+	    n6_cooldown_frontier = 0;
+	    n6_cooldown_plan4 = 0;
+	    n6_desconocidas_ultimo_plan4 = -1;
+	    n6_rescates_altura_n5 = 0;
+	    n6_rescates_mov_n5 = 0;
+	    hayPlan = false;
+	    plan.clear();
+	  }
   if (sensores.superficie[0] == 'D')
     tiene_zapatillas = true;
   if (n6_dist_inicial_bel < 0)
@@ -2248,6 +2386,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores
       n6_pasos_busca_bel = 0;
       n6_dist_inicial_bel = -1;
       n6_rescates_altura_n5 = 0;
+      n6_rescates_mov_n5 = 0;
 
       return ComportamientoIngenieroNivel_1(sensores);
     }
@@ -2297,6 +2436,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores
     n6_cooldown_plan4 = 0;
     n6_desconocidas_ultimo_plan4 = -1;
     n6_rescates_altura_n5 = 0;
+    n6_rescates_mov_n5 = 0;
     hayPlan = false;
     plan.clear();
 
