@@ -246,7 +246,8 @@ private:
   std::list<Action> B_Anchura_Ingeniero(const EstadoI &inicio,
                                         const ubicacion &destino,
                                         const std::vector<std::vector<unsigned char>> &terreno,
-                                        const std::vector<std::vector<unsigned char>> &altura);
+                                        const std::vector<std::vector<unsigned char>> &altura,
+                                        int max_expansiones = -1);
 
   // =========================================================================
   // FUNCIONES AUXILIARES DE BÚSQUEDA NIVEL 4
@@ -259,7 +260,7 @@ private:
   int ImpactoOperacionCasilla(int f, int c, int op) const;
   bool YaEnPlan(const std::list<Paso> &plan, int f, int c) const;
 
-  std::list<Paso> BuscarPlanNivel4(const ubicacion &origen, int maxImpacto);
+  std::list<Paso> BuscarPlanNivel4(const ubicacion &origen, int maxImpacto, int maxNodos = -1);
 
   // =========================================================================
   // AUXILIARES NIVEL 5

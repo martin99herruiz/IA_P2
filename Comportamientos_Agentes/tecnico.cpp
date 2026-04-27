@@ -9,22 +9,22 @@ using namespace std;
 
 namespace
 {
-constexpr bool DEBUG_N5_TRACE_TEC = false;
+  constexpr bool DEBUG_N5_TRACE_TEC = false;
 
-const char *NombreEstadoT5(int st)
-{
-  switch (st)
+  const char *NombreEstadoT5(int st)
   {
-  case 0:
-    return "LIBRE";
-  case 1:
-    return "YENDO_OBJETIVO";
-  case 2:
-    return "ESPERANDO_INSTALL";
-  default:
-    return "?";
+    switch (st)
+    {
+    case 0:
+      return "LIBRE";
+    case 1:
+      return "YENDO_OBJETIVO";
+    case 2:
+      return "ESPERANDO_INSTALL";
+    default:
+      return "?";
+    }
   }
-}
 } // namespace
 
 // =========================================================================
@@ -562,7 +562,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
  */
 bool ComportamientoTecnico::es_camino(unsigned char c) const
 {
-  return (c == 'C' || c == 'D' || c == 'U');
+  return (c == 'C' || c == 'S' || c == 'D' || c == 'U');
 }
 
 /**
@@ -1043,49 +1043,49 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_3(Sensores sensores)
   return IDLE;
 }
 
-  /**
-   * @brief Comportamiento del técnico para el Nivel 4.
-   * @param sensores Datos actuales de los sensores.
-   * @return Acción a realizar.
-   */
-  Action ComportamientoTecnico::ComportamientoTecnicoNivel_4(Sensores sensores)
-  {
-    return IDLE;
-  }
+/**
+ * @brief Comportamiento del técnico para el Nivel 4.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
+Action ComportamientoTecnico::ComportamientoTecnicoNivel_4(Sensores sensores)
+{
+  return IDLE;
+}
 
-  //====================================================================
-  //             Niveles 5  - COMPORTAMIENTO FINAL
-  //====================================================================
+//====================================================================
+//             Niveles 5  - COMPORTAMIENTO FINAL
+//====================================================================
 
-  bool ComportamientoTecnico::MismaCasilla(const ubicacion &u, int f, int c) const
-  {
-    return u.f == f && u.c == c;
-  }
+bool ComportamientoTecnico::MismaCasilla(const ubicacion &u, int f, int c) const
+{
+  return u.f == f && u.c == c;
+}
 
-  bool ComportamientoTecnico::EsAdyacenteOrtogonal(int f1, int c1, int f2, int c2) const
-  {
-    return (abs(f1 - f2) + abs(c1 - c2)) == 1;
-  }
+bool ComportamientoTecnico::EsAdyacenteOrtogonal(int f1, int c1, int f2, int c2) const
+{
+  return (abs(f1 - f2) + abs(c1 - c2)) == 1;
+}
 
-  Orientacion ComportamientoTecnico::OrientacionHacia(int f1, int c1, int f2, int c2) const
-  {
-    if (f2 == f1 - 1 && c2 == c1)
-      return norte;
-    if (f2 == f1 + 1 && c2 == c1)
-      return sur;
-    if (f2 == f1 && c2 == c1 + 1)
-      return este;
-    if (f2 == f1 && c2 == c1 - 1)
-      return oeste;
+Orientacion ComportamientoTecnico::OrientacionHacia(int f1, int c1, int f2, int c2) const
+{
+  if (f2 == f1 - 1 && c2 == c1)
+    return norte;
+  if (f2 == f1 + 1 && c2 == c1)
+    return sur;
+  if (f2 == f1 && c2 == c1 + 1)
+    return este;
+  if (f2 == f1 && c2 == c1 - 1)
+    return oeste;
 
-    return norte; // caso imposible si la relación es ortogonal
-  }
+  return norte; // caso imposible si la relación es ortogonal
+}
 
-  /**
-   * @brief Comportamiento del técnico para el Nivel 5.
-   * @param sensores Datos actuales de los sensores.
-   * @return Acción a realizar.
-   */
+/**
+ * @brief Comportamiento del técnico para el Nivel 5.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
 Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores)
 {
   ActualizarMapa(sensores);
@@ -1097,11 +1097,7 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores)
 
     if (!init_dbg || ultimo_estado_dbg != estado_n5)
     {
-      cout << "[N5-TEC-ESTADO] t=" << sensores.tiempo
-           << " estado=" << NombreEstadoT5((int)estado_n5)
-           << " pos=(" << sensores.posF << "," << sensores.posC << ")"
-           << " obj=(" << objetivo_n5.f << "," << objetivo_n5.c << ")"
-           << " hayObj=" << hayObjetivoN5 << "\n";
+
       init_dbg = true;
       ultimo_estado_dbg = estado_n5;
     }
@@ -1110,65 +1106,57 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores)
   if (sensores.superficie[0] == 'D')
     tiene_zapatillas = true;
 
-    ubicacion actual;
-    actual.f = sensores.posF;
-    actual.c = sensores.posC;
-    actual.brujula = sensores.rumbo;
+  ubicacion actual;
+  actual.f = sensores.posF;
+  actual.c = sensores.posC;
+  actual.brujula = sensores.rumbo;
 
-    if (sensores.reset)
-    {
-      hayPlan = false;
-      plan.clear();
-      estado_n5 = T5_LIBRE;
-      hayObjetivoN5 = false;
-      espera_giro_n5 = 0;
-      bloqueos_frente_n5 = 0;
-      return IDLE;
-    }
+  if (sensores.reset)
+  {
+    hayPlan = false;
+    plan.clear();
+    estado_n5 = T5_LIBRE;
+    hayObjetivoN5 = false;
+    espera_giro_n5 = 0;
+    bloqueos_frente_n5 = 0;
+    return IDLE;
+  }
 
-    // El Ingeniero envía COME: actualizar objetivo y estado.
+  // El Ingeniero envía COME: actualizar objetivo y estado.
   if (sensores.venpaca)
   {
     objetivo_n5.f = sensores.GotoF;
     objetivo_n5.c = sensores.GotoC;
-      objetivo_n5.brujula = sensores.rumbo;
-      hayObjetivoN5 = true;
-      espera_giro_n5 = 0;
-      hayPlan = false;
-      plan.clear();
-      bloqueos_frente_n5 = 0;
+    objetivo_n5.brujula = sensores.rumbo;
+    hayObjetivoN5 = true;
+    espera_giro_n5 = 0;
+    hayPlan = false;
+    plan.clear();
+    bloqueos_frente_n5 = 0;
 
     if (MismaCasilla(actual, objetivo_n5.f, objetivo_n5.c))
       estado_n5 = T5_ESPERANDO_INSTALL;
     else
       estado_n5 = T5_YENDO_OBJETIVO;
-
-    if (DEBUG_N5_TRACE_TEC)
-    {
-      cout << "[N5-TEC-COME] t=" << sensores.tiempo
-           << " goto=(" << objetivo_n5.f << "," << objetivo_n5.c << ")"
-           << " pos=(" << sensores.posF << "," << sensores.posC << ")"
-           << " estado=" << NombreEstadoT5((int)estado_n5) << "\n";
-    }
   }
 
-    // Choque: invalida el plan, mantiene objetivo y estado.
-    if (sensores.choque)
-    {
-      hayPlan = false;
-      plan.clear();
-    }
+  // Choque: invalida el plan, mantiene objetivo y estado.
+  if (sensores.choque)
+  {
+    hayPlan = false;
+    plan.clear();
+  }
 
-    // Navegar hacia el objetivo marcado por el Ingeniero.
-    if (estado_n5 == T5_YENDO_OBJETIVO && hayObjetivoN5)
-    {
+  // Navegar hacia el objetivo marcado por el Ingeniero.
+  if (estado_n5 == T5_YENDO_OBJETIVO && hayObjetivoN5)
+  {
     if (MismaCasilla(actual, objetivo_n5.f, objetivo_n5.c))
     {
       hayPlan = false;
       plan.clear();
-        estado_n5 = T5_ESPERANDO_INSTALL;
-        espera_giro_n5 = 0;
-        bloqueos_frente_n5 = 0;
+      estado_n5 = T5_ESPERANDO_INSTALL;
+      espera_giro_n5 = 0;
+      bloqueos_frente_n5 = 0;
 
       if (DEBUG_N5_TRACE_TEC)
       {
@@ -1178,116 +1166,98 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores)
       return IDLE;
     }
 
-      if (!hayPlan)
+    if (!hayPlan)
+    {
+      EstadoT inicio, fin;
+      inicio.site.f = sensores.posF;
+      inicio.site.c = sensores.posC;
+      inicio.site.brujula = sensores.rumbo;
+      inicio.zapatillas = tiene_zapatillas;
+      fin.site.f = objetivo_n5.f;
+      fin.site.c = objetivo_n5.c;
+      fin.site.brujula = sensores.rumbo;
+      fin.zapatillas = false;
+
+      int bloque_f = -1, bloque_c = -1;
+      for (int idx = 1; idx <= 3; idx++)
       {
-        EstadoT inicio, fin;
-        inicio.site.f = sensores.posF;
-        inicio.site.c = sensores.posC;
-        inicio.site.brujula = sensores.rumbo;
-        inicio.zapatillas = tiene_zapatillas;
-        fin.site.f = objetivo_n5.f;
-        fin.site.c = objetivo_n5.c;
-        fin.site.brujula = sensores.rumbo;
-        fin.zapatillas = false;
-
-        int bloque_f = -1, bloque_c = -1;
-        for (int idx = 1; idx <= 3; idx++)
+        if (sensores.agentes[idx] == 'i')
         {
-          if (sensores.agentes[idx] == 'i')
-          {
-            auto p = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, idx);
-            bloque_f = p.first;
-            bloque_c = p.second;
-            break;
-          }
+          auto p = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, idx);
+          bloque_f = p.first;
+          bloque_c = p.second;
+          break;
         }
+      }
 
-        bool bloqueo_temporal = (bloque_f >= 0 && bloque_c >= 0 &&
-                                 !(bloque_f == objetivo_n5.f && bloque_c == objetivo_n5.c));
-        unsigned char backup_bloqueo = '?';
-        if (bloqueo_temporal)
+      bool bloqueo_temporal = (bloque_f >= 0 && bloque_c >= 0 &&
+                               !(bloque_f == objetivo_n5.f && bloque_c == objetivo_n5.c));
+      unsigned char backup_bloqueo = '?';
+      if (bloqueo_temporal)
+      {
+        backup_bloqueo = mapaResultado[bloque_f][bloque_c];
+        mapaResultado[bloque_f][bloque_c] = 'M';
+      }
+
+      plan = AEstrellaTecnico(inicio, fin);
+
+      if (bloqueo_temporal)
+        mapaResultado[bloque_f][bloque_c] = backup_bloqueo;
+
+      hayPlan = !plan.empty();
+      if (hayPlan)
+        VisualizaPlan(inicio.site, plan);
+      else
+      {
+        if (sensores.nivel == 6)
+          return ComportamientoTecnicoNivel_1(sensores);
+        return IDLE;
+      }
+    }
+
+    // Esperar si el Ingeniero bloquea la casilla frontal.
+    if (!plan.empty() && plan.front() == WALK && sensores.agentes[2] == 'i')
+    {
+      hayPlan = false;
+      plan.clear();
+      bloqueos_frente_n5++;
+      return IDLE;
+    }
+
+    if (!plan.empty())
+    {
+      Action accion = plan.front();
+
+      // En nivel 6 el plan puede atravesar celdas aún no bien conocidas.
+      // Antes de ejecutar WALK, validar con los sensores actuales para
+      // evitar caídas por desnivel no previsto.
+      if (accion == WALK)
+      {
+        char frente = ViablePorAlturaT(sensores.superficie[2],
+                                       sensores.cota[2] - sensores.cota[0],
+                                       tiene_zapatillas);
+        if (frente == 'P' || sensores.agentes[2] == 'i')
         {
-          backup_bloqueo = mapaResultado[bloque_f][bloque_c];
-          mapaResultado[bloque_f][bloque_c] = 'M';
-        }
-
-        plan = AEstrellaTecnico(inicio, fin);
-
-        if (bloqueo_temporal)
-          mapaResultado[bloque_f][bloque_c] = backup_bloqueo;
-
-        hayPlan = !plan.empty();
-        if (hayPlan)
-          VisualizaPlan(inicio.site, plan);
-        else
-        {
+          hayPlan = false;
+          plan.clear();
           if (sensores.nivel == 6)
             return ComportamientoTecnicoNivel_1(sensores);
           return IDLE;
         }
-
-        if (DEBUG_N5_TRACE_TEC)
-        {
-          cout << "[N5-TEC-PLAN] t=" << sensores.tiempo
-               << " acciones=" << plan.size()
-               << " desde=(" << sensores.posF << "," << sensores.posC << ")"
-               << " hasta=(" << objetivo_n5.f << "," << objetivo_n5.c << ")"
-               << " rumbo=" << sensores.rumbo
-               << " ag1=" << sensores.agentes[1]
-               << " ag2=" << sensores.agentes[2]
-               << " ag3=" << sensores.agentes[3] << "\n";
-        }
       }
 
-      // Esperar si el Ingeniero bloquea la casilla frontal.
-      if (!plan.empty() && plan.front() == WALK && sensores.agentes[2] == 'i')
-      {
-        if (DEBUG_N5_TRACE_TEC)
-        {
-          cout << "[N5-TEC-BLOQ] t=" << sensores.tiempo
-               << " pos=(" << sensores.posF << "," << sensores.posC << ")"
-               << " rumbo=" << sensores.rumbo
-               << " bloqueos=" << (bloqueos_frente_n5 + 1) << "\n";
-        }
+      plan.pop_front();
+      if (plan.empty())
         hayPlan = false;
-        plan.clear();
-        bloqueos_frente_n5++;
-        return IDLE;
-      }
-
-      if (!plan.empty())
-      {
-        Action accion = plan.front();
-
-        // En nivel 6 el plan puede atravesar celdas aún no bien conocidas.
-        // Antes de ejecutar WALK, validar con los sensores actuales para
-        // evitar caídas por desnivel no previsto.
-        if (accion == WALK)
-        {
-          char frente = ViablePorAlturaT(sensores.superficie[2],
-                                         sensores.cota[2] - sensores.cota[0],
-                                         tiene_zapatillas);
-          if (frente == 'P' || sensores.agentes[2] == 'i')
-          {
-            hayPlan = false;
-            plan.clear();
-            if (sensores.nivel == 6)
-              return ComportamientoTecnicoNivel_1(sensores);
-            return IDLE;
-          }
-        }
-
-        plan.pop_front();
-        if (plan.empty()) hayPlan = false;
-        if (accion != TURN_SL && accion != TURN_SR)
-          bloqueos_frente_n5 = 0;
-        return accion;
-      }
-
-      return IDLE;
+      if (accion != TURN_SL && accion != TURN_SR)
+        bloqueos_frente_n5 = 0;
+      return accion;
     }
 
-    // Esperar posición de instalación y ejecutar INSTALL.
+    return IDLE;
+  }
+
+  // Esperar posición de instalación y ejecutar INSTALL.
   if (estado_n5 == T5_ESPERANDO_INSTALL)
   {
     // Condición perfecta: emitir INSTALL y volver a esperar nuevo COME.
@@ -1304,453 +1274,434 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores)
       return INSTALL;
     }
 
-      // Ingeniero justo enfrente pero no enfrentados aún: esperar a que gire.
+    // Ingeniero justo enfrente pero no enfrentados aún: esperar a que gire.
     if (sensores.agentes[2] == 'i')
       return IDLE;
 
-      // Ingeniero visible en diagonal izquierda: girar a la izquierda.
-      if (sensores.agentes[1] == 'i')
-        return TURN_SL;
+    // Ingeniero visible en diagonal izquierda: girar a la izquierda.
+    if (sensores.agentes[1] == 'i')
+      return TURN_SL;
 
-      // Ingeniero visible en diagonal derecha: girar a la derecha.
+    // Ingeniero visible en diagonal derecha: girar a la derecha.
     if (sensores.agentes[3] == 'i')
       return TURN_SR;
 
-    // Ingeniero no visible: rotar un paso por turno para encontrarlo.
-    if (DEBUG_N5_TRACE_TEC)
-    {
-      if (((int)sensores.tiempo % 100) == 0)
-      {
-        cout << "[N5-TEC-WAIT] t=" << sensores.tiempo
-             << " pos=(" << sensores.posF << "," << sensores.posC << ")"
-             << " ag1=" << sensores.agentes[1]
-             << " ag2=" << sensores.agentes[2]
-             << " ag3=" << sensores.agentes[3]
-             << " enfrente=" << sensores.enfrente << "\n";
-      }
-    }
     return TURN_SR;
   }
 
-    return IDLE;
-  }
-  /**
-   * @brief Comportamiento del técnico para el Nivel 6.
-   * @param sensores Datos actuales de los sensores.
-   * @return Acción a realizar.
-   */
-  Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores)
+  return IDLE;
+}
+/**
+ * @brief Comportamiento del técnico para el Nivel 6.
+ * @param sensores Datos actuales de los sensores.
+ * @return Acción a realizar.
+ */
+Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores)
+{
+  ActualizarMapa(sensores);
+
+  if (sensores.venpaca || estado_n5 != T5_LIBRE || hayObjetivoN5)
+    return ComportamientoTecnicoNivel_5(sensores);
+
+  return IDLE;
+}
+
+// =========================================================================
+// FUNCIONES PROPORCIONADAS
+// =========================================================================
+
+/**
+ * @brief Actualiza el mapaResultado y mapaCotas con la información de los sensores.
+ * @param sensores Datos actuales de los sensores.
+ */
+void ComportamientoTecnico::ActualizarMapa(Sensores sensores)
+{
+  mapaResultado[sensores.posF][sensores.posC] = sensores.superficie[0];
+  mapaCotas[sensores.posF][sensores.posC] = sensores.cota[0];
+
+  int pos = 1;
+  switch (sensores.rumbo)
   {
-    ActualizarMapa(sensores);
-
-    // En nivel 6 mantenemos al técnico en ahorro hasta que haya coordinación
-    // explícita del Ingeniero (COME/objetivo), momento en el que se usa N5.
-    if (sensores.venpaca || estado_n5 != T5_LIBRE || hayObjetivoN5)
-      return ComportamientoTecnicoNivel_5(sensores);
-
-    if (sensores.enfrente)
-      return INSTALL;
-
-    // Mientras espera coordinación, recolecta ítems como en nivel 1
-    return ComportamientoTecnicoNivel_1(sensores);
+  case norte:
+    for (int j = 1; j < 4; j++)
+      for (int i = -j; i <= j; i++)
+      {
+        mapaResultado[sensores.posF - j][sensores.posC + i] = sensores.superficie[pos];
+        mapaCotas[sensores.posF - j][sensores.posC + i] = sensores.cota[pos++];
+      }
+    break;
+  case noreste:
+    mapaResultado[sensores.posF - 1][sensores.posC] = sensores.superficie[1];
+    mapaCotas[sensores.posF - 1][sensores.posC] = sensores.cota[1];
+    mapaResultado[sensores.posF - 1][sensores.posC + 1] = sensores.superficie[2];
+    mapaCotas[sensores.posF - 1][sensores.posC + 1] = sensores.cota[2];
+    mapaResultado[sensores.posF][sensores.posC + 1] = sensores.superficie[3];
+    mapaCotas[sensores.posF][sensores.posC + 1] = sensores.cota[3];
+    mapaResultado[sensores.posF - 2][sensores.posC] = sensores.superficie[4];
+    mapaCotas[sensores.posF - 2][sensores.posC] = sensores.cota[4];
+    mapaResultado[sensores.posF - 2][sensores.posC + 1] = sensores.superficie[5];
+    mapaCotas[sensores.posF - 2][sensores.posC + 1] = sensores.cota[5];
+    mapaResultado[sensores.posF - 2][sensores.posC + 2] = sensores.superficie[6];
+    mapaCotas[sensores.posF - 2][sensores.posC + 2] = sensores.cota[6];
+    mapaResultado[sensores.posF - 1][sensores.posC + 2] = sensores.superficie[7];
+    mapaCotas[sensores.posF - 1][sensores.posC + 2] = sensores.cota[7];
+    mapaResultado[sensores.posF][sensores.posC + 2] = sensores.superficie[8];
+    mapaCotas[sensores.posF][sensores.posC + 2] = sensores.cota[8];
+    mapaResultado[sensores.posF - 3][sensores.posC] = sensores.superficie[9];
+    mapaCotas[sensores.posF - 3][sensores.posC] = sensores.cota[9];
+    mapaResultado[sensores.posF - 3][sensores.posC + 1] = sensores.superficie[10];
+    mapaCotas[sensores.posF - 3][sensores.posC + 1] = sensores.cota[10];
+    mapaResultado[sensores.posF - 3][sensores.posC + 2] = sensores.superficie[11];
+    mapaCotas[sensores.posF - 3][sensores.posC + 2] = sensores.cota[11];
+    mapaResultado[sensores.posF - 3][sensores.posC + 3] = sensores.superficie[12];
+    mapaCotas[sensores.posF - 3][sensores.posC + 3] = sensores.cota[12];
+    mapaResultado[sensores.posF - 2][sensores.posC + 3] = sensores.superficie[13];
+    mapaCotas[sensores.posF - 2][sensores.posC + 3] = sensores.cota[13];
+    mapaResultado[sensores.posF - 1][sensores.posC + 3] = sensores.superficie[14];
+    mapaCotas[sensores.posF - 1][sensores.posC + 3] = sensores.cota[14];
+    mapaResultado[sensores.posF][sensores.posC + 3] = sensores.superficie[15];
+    mapaCotas[sensores.posF][sensores.posC + 3] = sensores.cota[15];
+    break;
+  case este:
+    for (int j = 1; j < 4; j++)
+      for (int i = -j; i <= j; i++)
+      {
+        mapaResultado[sensores.posF + i][sensores.posC + j] = sensores.superficie[pos];
+        mapaCotas[sensores.posF + i][sensores.posC + j] = sensores.cota[pos++];
+      }
+    break;
+  case sureste:
+    mapaResultado[sensores.posF][sensores.posC + 1] = sensores.superficie[1];
+    mapaCotas[sensores.posF][sensores.posC + 1] = sensores.cota[1];
+    mapaResultado[sensores.posF + 1][sensores.posC + 1] = sensores.superficie[2];
+    mapaCotas[sensores.posF + 1][sensores.posC + 1] = sensores.cota[2];
+    mapaResultado[sensores.posF + 1][sensores.posC] = sensores.superficie[3];
+    mapaCotas[sensores.posF + 1][sensores.posC] = sensores.cota[3];
+    mapaResultado[sensores.posF][sensores.posC + 2] = sensores.superficie[4];
+    mapaCotas[sensores.posF][sensores.posC + 2] = sensores.cota[4];
+    mapaResultado[sensores.posF + 1][sensores.posC + 2] = sensores.superficie[5];
+    mapaCotas[sensores.posF + 1][sensores.posC + 2] = sensores.cota[5];
+    mapaResultado[sensores.posF + 2][sensores.posC + 2] = sensores.superficie[6];
+    mapaCotas[sensores.posF + 2][sensores.posC + 2] = sensores.cota[6];
+    mapaResultado[sensores.posF + 2][sensores.posC + 1] = sensores.superficie[7];
+    mapaCotas[sensores.posF + 2][sensores.posC + 1] = sensores.cota[7];
+    mapaResultado[sensores.posF + 2][sensores.posC] = sensores.superficie[8];
+    mapaCotas[sensores.posF + 2][sensores.posC] = sensores.cota[8];
+    mapaResultado[sensores.posF][sensores.posC + 3] = sensores.superficie[9];
+    mapaCotas[sensores.posF][sensores.posC + 3] = sensores.cota[9];
+    mapaResultado[sensores.posF + 1][sensores.posC + 3] = sensores.superficie[10];
+    mapaCotas[sensores.posF + 1][sensores.posC + 3] = sensores.cota[10];
+    mapaResultado[sensores.posF + 2][sensores.posC + 3] = sensores.superficie[11];
+    mapaCotas[sensores.posF + 2][sensores.posC + 3] = sensores.cota[11];
+    mapaResultado[sensores.posF + 3][sensores.posC + 3] = sensores.superficie[12];
+    mapaCotas[sensores.posF + 3][sensores.posC + 3] = sensores.cota[12];
+    mapaResultado[sensores.posF + 3][sensores.posC + 2] = sensores.superficie[13];
+    mapaCotas[sensores.posF + 3][sensores.posC + 2] = sensores.cota[13];
+    mapaResultado[sensores.posF + 3][sensores.posC + 1] = sensores.superficie[14];
+    mapaCotas[sensores.posF + 3][sensores.posC + 1] = sensores.cota[14];
+    mapaResultado[sensores.posF + 3][sensores.posC] = sensores.superficie[15];
+    mapaCotas[sensores.posF + 3][sensores.posC] = sensores.cota[15];
+    break;
+  case sur:
+    for (int j = 1; j < 4; j++)
+      for (int i = -j; i <= j; i++)
+      {
+        mapaResultado[sensores.posF + j][sensores.posC - i] = sensores.superficie[pos];
+        mapaCotas[sensores.posF + j][sensores.posC - i] = sensores.cota[pos++];
+      }
+    break;
+  case suroeste:
+    mapaResultado[sensores.posF + 1][sensores.posC] = sensores.superficie[1];
+    mapaCotas[sensores.posF + 1][sensores.posC] = sensores.cota[1];
+    mapaResultado[sensores.posF + 1][sensores.posC - 1] = sensores.superficie[2];
+    mapaCotas[sensores.posF + 1][sensores.posC - 1] = sensores.cota[2];
+    mapaResultado[sensores.posF][sensores.posC - 1] = sensores.superficie[3];
+    mapaCotas[sensores.posF][sensores.posC - 1] = sensores.cota[3];
+    mapaResultado[sensores.posF + 2][sensores.posC] = sensores.superficie[4];
+    mapaCotas[sensores.posF + 2][sensores.posC] = sensores.cota[4];
+    mapaResultado[sensores.posF + 2][sensores.posC - 1] = sensores.superficie[5];
+    mapaCotas[sensores.posF + 2][sensores.posC - 1] = sensores.cota[5];
+    mapaResultado[sensores.posF + 2][sensores.posC - 2] = sensores.superficie[6];
+    mapaCotas[sensores.posF + 2][sensores.posC - 2] = sensores.cota[6];
+    mapaResultado[sensores.posF + 1][sensores.posC - 2] = sensores.superficie[7];
+    mapaCotas[sensores.posF + 1][sensores.posC - 2] = sensores.cota[7];
+    mapaResultado[sensores.posF][sensores.posC - 2] = sensores.superficie[8];
+    mapaCotas[sensores.posF][sensores.posC - 2] = sensores.cota[8];
+    mapaResultado[sensores.posF + 3][sensores.posC] = sensores.superficie[9];
+    mapaCotas[sensores.posF + 3][sensores.posC] = sensores.cota[9];
+    mapaResultado[sensores.posF + 3][sensores.posC - 1] = sensores.superficie[10];
+    mapaCotas[sensores.posF + 3][sensores.posC - 1] = sensores.cota[10];
+    mapaResultado[sensores.posF + 3][sensores.posC - 2] = sensores.superficie[11];
+    mapaCotas[sensores.posF + 3][sensores.posC - 2] = sensores.cota[11];
+    mapaResultado[sensores.posF + 3][sensores.posC - 3] = sensores.superficie[12];
+    mapaCotas[sensores.posF + 3][sensores.posC - 3] = sensores.cota[12];
+    mapaResultado[sensores.posF + 2][sensores.posC - 3] = sensores.superficie[13];
+    mapaCotas[sensores.posF + 2][sensores.posC - 3] = sensores.cota[13];
+    mapaResultado[sensores.posF + 1][sensores.posC - 3] = sensores.superficie[14];
+    mapaCotas[sensores.posF + 1][sensores.posC - 3] = sensores.cota[14];
+    mapaResultado[sensores.posF][sensores.posC - 3] = sensores.superficie[15];
+    mapaCotas[sensores.posF][sensores.posC - 3] = sensores.cota[15];
+    break;
+  case oeste:
+    for (int j = 1; j < 4; j++)
+      for (int i = -j; i <= j; i++)
+      {
+        mapaResultado[sensores.posF - i][sensores.posC - j] = sensores.superficie[pos];
+        mapaCotas[sensores.posF - i][sensores.posC - j] = sensores.cota[pos++];
+      }
+    break;
+  case noroeste:
+    mapaResultado[sensores.posF][sensores.posC - 1] = sensores.superficie[1];
+    mapaCotas[sensores.posF][sensores.posC - 1] = sensores.cota[1];
+    mapaResultado[sensores.posF - 1][sensores.posC - 1] = sensores.superficie[2];
+    mapaCotas[sensores.posF - 1][sensores.posC - 1] = sensores.cota[2];
+    mapaResultado[sensores.posF - 1][sensores.posC] = sensores.superficie[3];
+    mapaCotas[sensores.posF - 1][sensores.posC] = sensores.cota[3];
+    mapaResultado[sensores.posF][sensores.posC - 2] = sensores.superficie[4];
+    mapaCotas[sensores.posF][sensores.posC - 2] = sensores.cota[4];
+    mapaResultado[sensores.posF - 1][sensores.posC - 2] = sensores.superficie[5];
+    mapaCotas[sensores.posF - 1][sensores.posC - 2] = sensores.cota[5];
+    mapaResultado[sensores.posF - 2][sensores.posC - 2] = sensores.superficie[6];
+    mapaCotas[sensores.posF - 2][sensores.posC - 2] = sensores.cota[6];
+    mapaResultado[sensores.posF - 2][sensores.posC - 1] = sensores.superficie[7];
+    mapaCotas[sensores.posF - 2][sensores.posC - 1] = sensores.cota[7];
+    mapaResultado[sensores.posF - 2][sensores.posC] = sensores.superficie[8];
+    mapaCotas[sensores.posF - 2][sensores.posC] = sensores.cota[8];
+    mapaResultado[sensores.posF][sensores.posC - 3] = sensores.superficie[9];
+    mapaCotas[sensores.posF][sensores.posC - 3] = sensores.cota[9];
+    mapaResultado[sensores.posF - 1][sensores.posC - 3] = sensores.superficie[10];
+    mapaCotas[sensores.posF - 1][sensores.posC - 3] = sensores.cota[10];
+    mapaResultado[sensores.posF - 2][sensores.posC - 3] = sensores.superficie[11];
+    mapaCotas[sensores.posF - 2][sensores.posC - 3] = sensores.cota[11];
+    mapaResultado[sensores.posF - 3][sensores.posC - 3] = sensores.superficie[12];
+    mapaCotas[sensores.posF - 3][sensores.posC - 3] = sensores.cota[12];
+    mapaResultado[sensores.posF - 3][sensores.posC - 2] = sensores.superficie[13];
+    mapaCotas[sensores.posF - 3][sensores.posC - 2] = sensores.cota[13];
+    mapaResultado[sensores.posF - 3][sensores.posC - 1] = sensores.superficie[14];
+    mapaCotas[sensores.posF - 3][sensores.posC - 1] = sensores.cota[14];
+    mapaResultado[sensores.posF - 3][sensores.posC] = sensores.superficie[15];
+    mapaCotas[sensores.posF - 3][sensores.posC] = sensores.cota[15];
+    break;
   }
+}
 
-  // =========================================================================
-  // FUNCIONES PROPORCIONADAS
-  // =========================================================================
+/**
+ * @brief Determina si una casilla es transitable para el técnico.
+ * En esta práctica, si el técnico tiene zapatillas, el bosque ('B') es transitable.
+ * @param f Fila de la casilla.
+ * @param c Columna de la casilla.
+ * @param tieneZapatillas Indica si el agente posee las zapatillas.
+ * @return true si la casilla es transitable.
+ */
+bool ComportamientoTecnico::EsCasillaTransitableLevel0(int f, int c, bool tieneZapatillas)
+{
+  if (f < 0 || f >= mapaResultado.size() || c < 0 || c >= mapaResultado[0].size())
+    return false;
+  return es_camino(mapaResultado[f][c]); // Solo 'C', 'D', 'U' son transitables en Nivel 0
+}
 
-  /**
-   * @brief Actualiza el mapaResultado y mapaCotas con la información de los sensores.
-   * @param sensores Datos actuales de los sensores.
-   */
-  void ComportamientoTecnico::ActualizarMapa(Sensores sensores)
+/**
+ * @brief Comprueba si la casilla de delante es accesible por diferencia de altura.
+ * Para el técnico: desnivel máximo siempre 1.
+ * @param actual Estado actual del agente (fila, columna, orientacion).
+ * @return true si el desnivel con la casilla de delante es admisible.
+ */
+bool ComportamientoTecnico::EsAccesiblePorAltura(const ubicacion &actual)
+{
+  ubicacion del = Delante(actual);
+  if (del.f < 0 || del.f >= mapaCotas.size() || del.c < 0 || del.c >= mapaCotas[0].size())
+    return false;
+  int desnivel = abs(mapaCotas[del.f][del.c] - mapaCotas[actual.f][actual.c]);
+  if (desnivel > 1)
+    return false;
+  return true;
+}
+
+/**
+ * @brief Devuelve la posición (fila, columna) de la casilla que hay delante del agente.
+ * Calcula la casilla frontal según la orientación actual (8 direcciones).
+ * @param actual Estado actual del agente (fila, columna, orientacion).
+ * @return Estado con la fila y columna de la casilla de enfrente.
+ */
+ubicacion ComportamientoTecnico::Delante(const ubicacion &actual) const
+{
+  ubicacion delante = actual;
+  switch (actual.brujula)
   {
-    mapaResultado[sensores.posF][sensores.posC] = sensores.superficie[0];
-    mapaCotas[sensores.posF][sensores.posC] = sensores.cota[0];
+  case 0:
+    delante.f--;
+    break; // norte
+  case 1:
+    delante.f--;
+    delante.c++;
+    break; // noreste
+  case 2:
+    delante.c++;
+    break; // este
+  case 3:
+    delante.f++;
+    delante.c++;
+    break; // sureste
+  case 4:
+    delante.f++;
+    break; // sur
+  case 5:
+    delante.f++;
+    delante.c--;
+    break; // suroeste
+  case 6:
+    delante.c--;
+    break; // oeste
+  case 7:
+    delante.f--;
+    delante.c--;
+    break; // noroeste
+  }
+  return delante;
+}
 
-    int pos = 1;
-    switch (sensores.rumbo)
+/**
+ * @brief Imprime por consola la secuencia de acciones de un plan.
+ *
+ * @param plan  Lista de acciones del plan.
+ */
+void ComportamientoTecnico::PintaPlan(const list<Action> &plan)
+{
+  auto it = plan.begin();
+  while (it != plan.end())
+  {
+    if (*it == WALK)
     {
-    case norte:
-      for (int j = 1; j < 4; j++)
-        for (int i = -j; i <= j; i++)
-        {
-          mapaResultado[sensores.posF - j][sensores.posC + i] = sensores.superficie[pos];
-          mapaCotas[sensores.posF - j][sensores.posC + i] = sensores.cota[pos++];
-        }
-      break;
-    case noreste:
-      mapaResultado[sensores.posF - 1][sensores.posC] = sensores.superficie[1];
-      mapaCotas[sensores.posF - 1][sensores.posC] = sensores.cota[1];
-      mapaResultado[sensores.posF - 1][sensores.posC + 1] = sensores.superficie[2];
-      mapaCotas[sensores.posF - 1][sensores.posC + 1] = sensores.cota[2];
-      mapaResultado[sensores.posF][sensores.posC + 1] = sensores.superficie[3];
-      mapaCotas[sensores.posF][sensores.posC + 1] = sensores.cota[3];
-      mapaResultado[sensores.posF - 2][sensores.posC] = sensores.superficie[4];
-      mapaCotas[sensores.posF - 2][sensores.posC] = sensores.cota[4];
-      mapaResultado[sensores.posF - 2][sensores.posC + 1] = sensores.superficie[5];
-      mapaCotas[sensores.posF - 2][sensores.posC + 1] = sensores.cota[5];
-      mapaResultado[sensores.posF - 2][sensores.posC + 2] = sensores.superficie[6];
-      mapaCotas[sensores.posF - 2][sensores.posC + 2] = sensores.cota[6];
-      mapaResultado[sensores.posF - 1][sensores.posC + 2] = sensores.superficie[7];
-      mapaCotas[sensores.posF - 1][sensores.posC + 2] = sensores.cota[7];
-      mapaResultado[sensores.posF][sensores.posC + 2] = sensores.superficie[8];
-      mapaCotas[sensores.posF][sensores.posC + 2] = sensores.cota[8];
-      mapaResultado[sensores.posF - 3][sensores.posC] = sensores.superficie[9];
-      mapaCotas[sensores.posF - 3][sensores.posC] = sensores.cota[9];
-      mapaResultado[sensores.posF - 3][sensores.posC + 1] = sensores.superficie[10];
-      mapaCotas[sensores.posF - 3][sensores.posC + 1] = sensores.cota[10];
-      mapaResultado[sensores.posF - 3][sensores.posC + 2] = sensores.superficie[11];
-      mapaCotas[sensores.posF - 3][sensores.posC + 2] = sensores.cota[11];
-      mapaResultado[sensores.posF - 3][sensores.posC + 3] = sensores.superficie[12];
-      mapaCotas[sensores.posF - 3][sensores.posC + 3] = sensores.cota[12];
-      mapaResultado[sensores.posF - 2][sensores.posC + 3] = sensores.superficie[13];
-      mapaCotas[sensores.posF - 2][sensores.posC + 3] = sensores.cota[13];
-      mapaResultado[sensores.posF - 1][sensores.posC + 3] = sensores.superficie[14];
-      mapaCotas[sensores.posF - 1][sensores.posC + 3] = sensores.cota[14];
-      mapaResultado[sensores.posF][sensores.posC + 3] = sensores.superficie[15];
-      mapaCotas[sensores.posF][sensores.posC + 3] = sensores.cota[15];
-      break;
-    case este:
-      for (int j = 1; j < 4; j++)
-        for (int i = -j; i <= j; i++)
-        {
-          mapaResultado[sensores.posF + i][sensores.posC + j] = sensores.superficie[pos];
-          mapaCotas[sensores.posF + i][sensores.posC + j] = sensores.cota[pos++];
-        }
-      break;
-    case sureste:
-      mapaResultado[sensores.posF][sensores.posC + 1] = sensores.superficie[1];
-      mapaCotas[sensores.posF][sensores.posC + 1] = sensores.cota[1];
-      mapaResultado[sensores.posF + 1][sensores.posC + 1] = sensores.superficie[2];
-      mapaCotas[sensores.posF + 1][sensores.posC + 1] = sensores.cota[2];
-      mapaResultado[sensores.posF + 1][sensores.posC] = sensores.superficie[3];
-      mapaCotas[sensores.posF + 1][sensores.posC] = sensores.cota[3];
-      mapaResultado[sensores.posF][sensores.posC + 2] = sensores.superficie[4];
-      mapaCotas[sensores.posF][sensores.posC + 2] = sensores.cota[4];
-      mapaResultado[sensores.posF + 1][sensores.posC + 2] = sensores.superficie[5];
-      mapaCotas[sensores.posF + 1][sensores.posC + 2] = sensores.cota[5];
-      mapaResultado[sensores.posF + 2][sensores.posC + 2] = sensores.superficie[6];
-      mapaCotas[sensores.posF + 2][sensores.posC + 2] = sensores.cota[6];
-      mapaResultado[sensores.posF + 2][sensores.posC + 1] = sensores.superficie[7];
-      mapaCotas[sensores.posF + 2][sensores.posC + 1] = sensores.cota[7];
-      mapaResultado[sensores.posF + 2][sensores.posC] = sensores.superficie[8];
-      mapaCotas[sensores.posF + 2][sensores.posC] = sensores.cota[8];
-      mapaResultado[sensores.posF][sensores.posC + 3] = sensores.superficie[9];
-      mapaCotas[sensores.posF][sensores.posC + 3] = sensores.cota[9];
-      mapaResultado[sensores.posF + 1][sensores.posC + 3] = sensores.superficie[10];
-      mapaCotas[sensores.posF + 1][sensores.posC + 3] = sensores.cota[10];
-      mapaResultado[sensores.posF + 2][sensores.posC + 3] = sensores.superficie[11];
-      mapaCotas[sensores.posF + 2][sensores.posC + 3] = sensores.cota[11];
-      mapaResultado[sensores.posF + 3][sensores.posC + 3] = sensores.superficie[12];
-      mapaCotas[sensores.posF + 3][sensores.posC + 3] = sensores.cota[12];
-      mapaResultado[sensores.posF + 3][sensores.posC + 2] = sensores.superficie[13];
-      mapaCotas[sensores.posF + 3][sensores.posC + 2] = sensores.cota[13];
-      mapaResultado[sensores.posF + 3][sensores.posC + 1] = sensores.superficie[14];
-      mapaCotas[sensores.posF + 3][sensores.posC + 1] = sensores.cota[14];
-      mapaResultado[sensores.posF + 3][sensores.posC] = sensores.superficie[15];
-      mapaCotas[sensores.posF + 3][sensores.posC] = sensores.cota[15];
-      break;
-    case sur:
-      for (int j = 1; j < 4; j++)
-        for (int i = -j; i <= j; i++)
-        {
-          mapaResultado[sensores.posF + j][sensores.posC - i] = sensores.superficie[pos];
-          mapaCotas[sensores.posF + j][sensores.posC - i] = sensores.cota[pos++];
-        }
-      break;
-    case suroeste:
-      mapaResultado[sensores.posF + 1][sensores.posC] = sensores.superficie[1];
-      mapaCotas[sensores.posF + 1][sensores.posC] = sensores.cota[1];
-      mapaResultado[sensores.posF + 1][sensores.posC - 1] = sensores.superficie[2];
-      mapaCotas[sensores.posF + 1][sensores.posC - 1] = sensores.cota[2];
-      mapaResultado[sensores.posF][sensores.posC - 1] = sensores.superficie[3];
-      mapaCotas[sensores.posF][sensores.posC - 1] = sensores.cota[3];
-      mapaResultado[sensores.posF + 2][sensores.posC] = sensores.superficie[4];
-      mapaCotas[sensores.posF + 2][sensores.posC] = sensores.cota[4];
-      mapaResultado[sensores.posF + 2][sensores.posC - 1] = sensores.superficie[5];
-      mapaCotas[sensores.posF + 2][sensores.posC - 1] = sensores.cota[5];
-      mapaResultado[sensores.posF + 2][sensores.posC - 2] = sensores.superficie[6];
-      mapaCotas[sensores.posF + 2][sensores.posC - 2] = sensores.cota[6];
-      mapaResultado[sensores.posF + 1][sensores.posC - 2] = sensores.superficie[7];
-      mapaCotas[sensores.posF + 1][sensores.posC - 2] = sensores.cota[7];
-      mapaResultado[sensores.posF][sensores.posC - 2] = sensores.superficie[8];
-      mapaCotas[sensores.posF][sensores.posC - 2] = sensores.cota[8];
-      mapaResultado[sensores.posF + 3][sensores.posC] = sensores.superficie[9];
-      mapaCotas[sensores.posF + 3][sensores.posC] = sensores.cota[9];
-      mapaResultado[sensores.posF + 3][sensores.posC - 1] = sensores.superficie[10];
-      mapaCotas[sensores.posF + 3][sensores.posC - 1] = sensores.cota[10];
-      mapaResultado[sensores.posF + 3][sensores.posC - 2] = sensores.superficie[11];
-      mapaCotas[sensores.posF + 3][sensores.posC - 2] = sensores.cota[11];
-      mapaResultado[sensores.posF + 3][sensores.posC - 3] = sensores.superficie[12];
-      mapaCotas[sensores.posF + 3][sensores.posC - 3] = sensores.cota[12];
-      mapaResultado[sensores.posF + 2][sensores.posC - 3] = sensores.superficie[13];
-      mapaCotas[sensores.posF + 2][sensores.posC - 3] = sensores.cota[13];
-      mapaResultado[sensores.posF + 1][sensores.posC - 3] = sensores.superficie[14];
-      mapaCotas[sensores.posF + 1][sensores.posC - 3] = sensores.cota[14];
-      mapaResultado[sensores.posF][sensores.posC - 3] = sensores.superficie[15];
-      mapaCotas[sensores.posF][sensores.posC - 3] = sensores.cota[15];
-      break;
-    case oeste:
-      for (int j = 1; j < 4; j++)
-        for (int i = -j; i <= j; i++)
-        {
-          mapaResultado[sensores.posF - i][sensores.posC - j] = sensores.superficie[pos];
-          mapaCotas[sensores.posF - i][sensores.posC - j] = sensores.cota[pos++];
-        }
-      break;
-    case noroeste:
-      mapaResultado[sensores.posF][sensores.posC - 1] = sensores.superficie[1];
-      mapaCotas[sensores.posF][sensores.posC - 1] = sensores.cota[1];
-      mapaResultado[sensores.posF - 1][sensores.posC - 1] = sensores.superficie[2];
-      mapaCotas[sensores.posF - 1][sensores.posC - 1] = sensores.cota[2];
-      mapaResultado[sensores.posF - 1][sensores.posC] = sensores.superficie[3];
-      mapaCotas[sensores.posF - 1][sensores.posC] = sensores.cota[3];
-      mapaResultado[sensores.posF][sensores.posC - 2] = sensores.superficie[4];
-      mapaCotas[sensores.posF][sensores.posC - 2] = sensores.cota[4];
-      mapaResultado[sensores.posF - 1][sensores.posC - 2] = sensores.superficie[5];
-      mapaCotas[sensores.posF - 1][sensores.posC - 2] = sensores.cota[5];
-      mapaResultado[sensores.posF - 2][sensores.posC - 2] = sensores.superficie[6];
-      mapaCotas[sensores.posF - 2][sensores.posC - 2] = sensores.cota[6];
-      mapaResultado[sensores.posF - 2][sensores.posC - 1] = sensores.superficie[7];
-      mapaCotas[sensores.posF - 2][sensores.posC - 1] = sensores.cota[7];
-      mapaResultado[sensores.posF - 2][sensores.posC] = sensores.superficie[8];
-      mapaCotas[sensores.posF - 2][sensores.posC] = sensores.cota[8];
-      mapaResultado[sensores.posF][sensores.posC - 3] = sensores.superficie[9];
-      mapaCotas[sensores.posF][sensores.posC - 3] = sensores.cota[9];
-      mapaResultado[sensores.posF - 1][sensores.posC - 3] = sensores.superficie[10];
-      mapaCotas[sensores.posF - 1][sensores.posC - 3] = sensores.cota[10];
-      mapaResultado[sensores.posF - 2][sensores.posC - 3] = sensores.superficie[11];
-      mapaCotas[sensores.posF - 2][sensores.posC - 3] = sensores.cota[11];
-      mapaResultado[sensores.posF - 3][sensores.posC - 3] = sensores.superficie[12];
-      mapaCotas[sensores.posF - 3][sensores.posC - 3] = sensores.cota[12];
-      mapaResultado[sensores.posF - 3][sensores.posC - 2] = sensores.superficie[13];
-      mapaCotas[sensores.posF - 3][sensores.posC - 2] = sensores.cota[13];
-      mapaResultado[sensores.posF - 3][sensores.posC - 1] = sensores.superficie[14];
-      mapaCotas[sensores.posF - 3][sensores.posC - 1] = sensores.cota[14];
-      mapaResultado[sensores.posF - 3][sensores.posC] = sensores.superficie[15];
-      mapaCotas[sensores.posF - 3][sensores.posC] = sensores.cota[15];
-      break;
+      cout << "W ";
     }
-  }
-
-  /**
-   * @brief Determina si una casilla es transitable para el técnico.
-   * En esta práctica, si el técnico tiene zapatillas, el bosque ('B') es transitable.
-   * @param f Fila de la casilla.
-   * @param c Columna de la casilla.
-   * @param tieneZapatillas Indica si el agente posee las zapatillas.
-   * @return true si la casilla es transitable.
-   */
-  bool ComportamientoTecnico::EsCasillaTransitableLevel0(int f, int c, bool tieneZapatillas)
-  {
-    if (f < 0 || f >= mapaResultado.size() || c < 0 || c >= mapaResultado[0].size())
-      return false;
-    return es_camino(mapaResultado[f][c]); // Solo 'C', 'D', 'U' son transitables en Nivel 0
-  }
-
-  /**
-   * @brief Comprueba si la casilla de delante es accesible por diferencia de altura.
-   * Para el técnico: desnivel máximo siempre 1.
-   * @param actual Estado actual del agente (fila, columna, orientacion).
-   * @return true si el desnivel con la casilla de delante es admisible.
-   */
-  bool ComportamientoTecnico::EsAccesiblePorAltura(const ubicacion &actual)
-  {
-    ubicacion del = Delante(actual);
-    if (del.f < 0 || del.f >= mapaCotas.size() || del.c < 0 || del.c >= mapaCotas[0].size())
-      return false;
-    int desnivel = abs(mapaCotas[del.f][del.c] - mapaCotas[actual.f][actual.c]);
-    if (desnivel > 1)
-      return false;
-    return true;
-  }
-
-  /**
-   * @brief Devuelve la posición (fila, columna) de la casilla que hay delante del agente.
-   * Calcula la casilla frontal según la orientación actual (8 direcciones).
-   * @param actual Estado actual del agente (fila, columna, orientacion).
-   * @return Estado con la fila y columna de la casilla de enfrente.
-   */
-  ubicacion ComportamientoTecnico::Delante(const ubicacion &actual) const
-  {
-    ubicacion delante = actual;
-    switch (actual.brujula)
+    else if (*it == JUMP)
     {
-    case 0:
-      delante.f--;
-      break; // norte
-    case 1:
-      delante.f--;
-      delante.c++;
-      break; // noreste
-    case 2:
-      delante.c++;
-      break; // este
-    case 3:
-      delante.f++;
-      delante.c++;
-      break; // sureste
-    case 4:
-      delante.f++;
-      break; // sur
-    case 5:
-      delante.f++;
-      delante.c--;
-      break; // suroeste
-    case 6:
-      delante.c--;
-      break; // oeste
-    case 7:
-      delante.f--;
-      delante.c--;
-      break; // noroeste
+      cout << "J ";
     }
-    return delante;
-  }
-
-  /**
-   * @brief Imprime por consola la secuencia de acciones de un plan.
-   *
-   * @param plan  Lista de acciones del plan.
-   */
-  void ComportamientoTecnico::PintaPlan(const list<Action> &plan)
-  {
-    auto it = plan.begin();
-    while (it != plan.end())
+    else if (*it == TURN_SR)
     {
-      if (*it == WALK)
-      {
-        cout << "W ";
-      }
-      else if (*it == JUMP)
-      {
-        cout << "J ";
-      }
-      else if (*it == TURN_SR)
-      {
-        cout << "r ";
-      }
-      else if (*it == TURN_SL)
-      {
-        cout << "l ";
-      }
-      else if (*it == COME)
-      {
-        cout << "C ";
-      }
-      else if (*it == IDLE)
-      {
-        cout << "I ";
-      }
-      else
-      {
-        cout << "-_ ";
-      }
-      it++;
+      cout << "r ";
     }
-    cout << "( longitud " << plan.size() << ")" << endl;
-  }
-
-  /**
-   * @brief Convierte un plan de acciones en una lista de casillas para
-   *        su visualización en el mapa 2D.
-   *
-   * @param st    Estado de partida.
-   * @param plan  Lista de acciones del plan.
-   */
-  void ComportamientoTecnico::VisualizaPlan(const ubicacion &st,
-                                            const list<Action> &plan)
-  {
-    listaPlanCasillas.clear();
-    ubicacion cst = st;
-
-    listaPlanCasillas.push_back({cst.f, cst.c, WALK});
-    auto it = plan.begin();
-    while (it != plan.end())
+    else if (*it == TURN_SL)
     {
+      cout << "l ";
+    }
+    else if (*it == COME)
+    {
+      cout << "C ";
+    }
+    else if (*it == IDLE)
+    {
+      cout << "I ";
+    }
+    else
+    {
+      cout << "-_ ";
+    }
+    it++;
+  }
+  cout << "( longitud " << plan.size() << ")" << endl;
+}
 
-      switch (*it)
+/**
+ * @brief Convierte un plan de acciones en una lista de casillas para
+ *        su visualización en el mapa 2D.
+ *
+ * @param st    Estado de partida.
+ * @param plan  Lista de acciones del plan.
+ */
+void ComportamientoTecnico::VisualizaPlan(const ubicacion &st,
+                                          const list<Action> &plan)
+{
+  listaPlanCasillas.clear();
+  ubicacion cst = st;
+
+  listaPlanCasillas.push_back({cst.f, cst.c, WALK});
+  auto it = plan.begin();
+  while (it != plan.end())
+  {
+
+    switch (*it)
+    {
+    case JUMP:
+      switch (cst.brujula)
       {
-      case JUMP:
-        switch (cst.brujula)
-        {
-        case 0:
-          cst.f--;
-          break;
-        case 1:
-          cst.f--;
-          cst.c++;
-          break;
-        case 2:
-          cst.c++;
-          break;
-        case 3:
-          cst.f++;
-          cst.c++;
-          break;
-        case 4:
-          cst.f++;
-          break;
-        case 5:
-          cst.f++;
-          cst.c--;
-          break;
-        case 6:
-          cst.c--;
-          break;
-        case 7:
-          cst.f--;
-          cst.c--;
-          break;
-        }
-        if (cst.f >= 0 && cst.f < mapaResultado.size() &&
-            cst.c >= 0 && cst.c < mapaResultado[0].size())
-          listaPlanCasillas.push_back({cst.f, cst.c, JUMP});
+      case 0:
+        cst.f--;
         break;
-      case WALK:
-        switch (cst.brujula)
-        {
-        case 0:
-          cst.f--;
-          break;
-        case 1:
-          cst.f--;
-          cst.c++;
-          break;
-        case 2:
-          cst.c++;
-          break;
-        case 3:
-          cst.f++;
-          cst.c++;
-          break;
-        case 4:
-          cst.f++;
-          break;
-        case 5:
-          cst.f++;
-          cst.c--;
-          break;
-        case 6:
-          cst.c--;
-          break;
-        case 7:
-          cst.f--;
-          cst.c--;
-          break;
-        }
-        if (cst.f >= 0 && cst.f < mapaResultado.size() &&
-            cst.c >= 0 && cst.c < mapaResultado[0].size())
-          listaPlanCasillas.push_back({cst.f, cst.c, WALK});
+      case 1:
+        cst.f--;
+        cst.c++;
         break;
-      case TURN_SR:
-        cst.brujula = (Orientacion)(((int)cst.brujula + 1) % 8);
+      case 2:
+        cst.c++;
         break;
-      case TURN_SL:
-        cst.brujula = (Orientacion)(((int)cst.brujula + 7) % 8);
+      case 3:
+        cst.f++;
+        cst.c++;
+        break;
+      case 4:
+        cst.f++;
+        break;
+      case 5:
+        cst.f++;
+        cst.c--;
+        break;
+      case 6:
+        cst.c--;
+        break;
+      case 7:
+        cst.f--;
+        cst.c--;
         break;
       }
-      it++;
+      if (cst.f >= 0 && cst.f < mapaResultado.size() &&
+          cst.c >= 0 && cst.c < mapaResultado[0].size())
+        listaPlanCasillas.push_back({cst.f, cst.c, JUMP});
+      break;
+    case WALK:
+      switch (cst.brujula)
+      {
+      case 0:
+        cst.f--;
+        break;
+      case 1:
+        cst.f--;
+        cst.c++;
+        break;
+      case 2:
+        cst.c++;
+        break;
+      case 3:
+        cst.f++;
+        cst.c++;
+        break;
+      case 4:
+        cst.f++;
+        break;
+      case 5:
+        cst.f++;
+        cst.c--;
+        break;
+      case 6:
+        cst.c--;
+        break;
+      case 7:
+        cst.f--;
+        cst.c--;
+        break;
+      }
+      if (cst.f >= 0 && cst.f < mapaResultado.size() &&
+          cst.c >= 0 && cst.c < mapaResultado[0].size())
+        listaPlanCasillas.push_back({cst.f, cst.c, WALK});
+      break;
+    case TURN_SR:
+      cst.brujula = (Orientacion)(((int)cst.brujula + 1) % 8);
+      break;
+    case TURN_SL:
+      cst.brujula = (Orientacion)(((int)cst.brujula + 7) % 8);
+      break;
     }
+    it++;
   }
+}
