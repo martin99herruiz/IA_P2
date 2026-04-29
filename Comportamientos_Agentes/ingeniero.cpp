@@ -15,7 +15,7 @@ using namespace std;
 namespace
 {
 constexpr bool DEBUG_N5_TRACE_ING = false;
-constexpr bool DEBUG_N6_TRACE_ING = true;
+constexpr bool DEBUG_N6_TRACE_ING = false;
 
 const char *NombreFaseN5(ComportamientoIngeniero::FaseNivel5 fase)
 {
@@ -1559,7 +1559,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
     int maxNodosN5 = -1;
     if (sensores.nivel == 6)
     {
-      int margen_eco_n6 = max(60, maxImpacto / 7);
+      int margen_eco_n6 = (mapaResultado.size() >= 90) ? 60 : max(60, maxImpacto / 7);
       maxImpacto = max(0, maxImpacto - margen_eco_n6);
       maxNodosN5 = 20000;
     }
@@ -1616,6 +1616,26 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
 
     paso_origen_n5 = *it_tramo_n5;
     paso_destino_n5 = *it_sig;
+
+    if (sensores.nivel == 6 && mapaResultado.size() >= 90 &&
+        DentroMapa(paso_origen_n5.fil, paso_origen_n5.col) &&
+        DentroMapa(paso_destino_n5.fil, paso_destino_n5.col))
+    {
+      int h_origen = (int)mapaCotas[paso_origen_n5.fil][paso_origen_n5.col];
+      int h_destino = (int)mapaCotas[paso_destino_n5.fil][paso_destino_n5.col];
+      if (h_destino >= h_origen - 1 && h_destino <= h_origen)
+      {
+        paso_origen_n5.op = 0;
+        paso_destino_n5.op = 0;
+      }
+      else if (paso_destino_n5.op < 0 &&
+               h_destino == h_origen + 1 &&
+               OperacionValidaEnCasilla(paso_origen_n5.fil, paso_origen_n5.col, 1))
+      {
+        paso_origen_n5.op = 1;
+        paso_destino_n5.op = 0;
+      }
+    }
 
     // Para INSTALL, el motor exige h_ingeniero en [h_tecnico-1, h_tecnico].
     // Con nuestra canalización por gravedad, eso se cumple si:
@@ -1702,7 +1722,9 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
           mapaResultado[bloque_f][bloque_c] = 'M';
         }
 
-        int bfs_limit_mov = (sensores.nivel == 6) ? 5000 : -1;
+        int bfs_limit_mov = -1;
+        if (sensores.nivel == 6)
+          bfs_limit_mov = (mapaResultado.size() >= 90) ? 20000 : 5000;
         plan_mov_n5 = B_Anchura_Ingeniero(inicio, objetivo_ing_n5, mapaResultado, mapaCotas, bfs_limit_mov);
 
         if (bloqueo_temporal)
@@ -2394,7 +2416,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores
   int maxImpacto = sensores.max_ecologico - sensores.ecologico;
   if (sensores.nivel == 6)
   {
-    int margen_eco_n6 = max(60, maxImpacto / 7);
+    int margen_eco_n6 = (mapaResultado.size() >= 90) ? 60 : max(60, maxImpacto / 7);
     maxImpacto = max(0, maxImpacto - margen_eco_n6);
   }
   if (maxImpacto < 0)

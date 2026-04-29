@@ -162,7 +162,7 @@ private:
   int CosteEnergiaTecnico(Action accion, const EstadoT &st) const;
   int HeuristicaTecnico(const EstadoT &actual, const EstadoT &destino) const;
 
-  std::list<Action> AEstrellaTecnico(const EstadoT &inicio, const EstadoT &fin);
+  std::list<Action> AEstrellaTecnico(const EstadoT &inicio, const EstadoT &fin, int max_expansiones = -1);
   bool EsDestino(const EstadoT &st, const EstadoT &fin) const;
 
   // =========================================================

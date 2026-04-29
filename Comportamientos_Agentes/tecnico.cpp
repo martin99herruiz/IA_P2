@@ -920,7 +920,7 @@ int ComportamientoTecnico::HeuristicaTecnico(const EstadoT &actual, const Estado
   return max(df, dc);
 }
 
-list<Action> ComportamientoTecnico::AEstrellaTecnico(const EstadoT &inicio, const EstadoT &fin)
+list<Action> ComportamientoTecnico::AEstrellaTecnico(const EstadoT &inicio, const EstadoT &fin, int max_expansiones)
 {
   list<Action> vacio;
 
@@ -935,11 +935,16 @@ list<Action> ComportamientoTecnico::AEstrellaTecnico(const EstadoT &inicio, cons
 
   abiertos.push(primero);
   mejor_g[inicio] = 0;
+  int expansiones = 0;
 
   while (!abiertos.empty())
   {
+    if (max_expansiones > 0 && expansiones >= max_expansiones)
+      break;
+
     NodoT actual = abiertos.top();
     abiertos.pop();
+    expansiones++;
 
     auto it_mejor = mejor_g.find(actual.estado);
     if (it_mejor != mejor_g.end() && actual.g > it_mejor->second)
@@ -1199,7 +1204,8 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_5(Sensores sensores)
         mapaResultado[bloque_f][bloque_c] = 'M';
       }
 
-      plan = AEstrellaTecnico(inicio, fin);
+      int limite_astar_n6 = (sensores.nivel == 6 && mapaResultado.size() >= 70) ? 5000 : -1;
+      plan = AEstrellaTecnico(inicio, fin, limite_astar_n6);
 
       if (bloqueo_temporal)
         mapaResultado[bloque_f][bloque_c] = backup_bloqueo;
@@ -1303,7 +1309,73 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_6(Sensores sensores)
   if (sensores.venpaca || estado_n5 != T5_LIBRE || hayObjetivoN5)
     return ComportamientoTecnicoNivel_5(sensores);
 
-  return IDLE;
+  if (sensores.superficie[0] == 'D')
+    tiene_zapatillas = true;
+
+  pair<int, int> pi = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 1);
+  pair<int, int> pc = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 2);
+  pair<int, int> pd = CoordenadaSensor123T(sensores.posF, sensores.posC, sensores.rumbo, 3);
+
+  auto enRangoN6 = [&](pair<int, int> p)
+  {
+    return p.first >= 0 && p.first < (int)mapaResultado.size() &&
+           p.second >= 0 && p.second < (int)mapaResultado[0].size();
+  };
+
+  auto viableN6 = [&](pair<int, int> p, int idx) -> bool
+  {
+    if (!enRangoN6(p))
+      return false;
+    if (sensores.agentes[idx] == 'i')
+      return false;
+    char v = ViablePorAlturaT(sensores.superficie[idx],
+                              sensores.cota[idx] - sensores.cota[0],
+                              tiene_zapatillas);
+    return v != 'P';
+  };
+
+  int dist_actual = abs(sensores.BelPosF - sensores.posF) +
+                    abs(sensores.BelPosC - sensores.posC);
+  if (dist_actual > 90)
+    return IDLE;
+
+  Action mejor = IDLE;
+  int mejor_dist = dist_actual;
+
+  if (viableN6(pc, 2))
+  {
+    int d = abs(sensores.BelPosF - pc.first) + abs(sensores.BelPosC - pc.second);
+    if (d < mejor_dist)
+    {
+      mejor_dist = d;
+      mejor = WALK;
+    }
+  }
+
+  if (viableN6(pi, 1))
+  {
+    int d = abs(sensores.BelPosF - pi.first) + abs(sensores.BelPosC - pi.second);
+    if (d < mejor_dist)
+    {
+      mejor_dist = d;
+      mejor = TURN_SL;
+    }
+  }
+
+  if (viableN6(pd, 3))
+  {
+    int d = abs(sensores.BelPosF - pd.first) + abs(sensores.BelPosC - pd.second);
+    if (d < mejor_dist)
+    {
+      mejor_dist = d;
+      mejor = TURN_SR;
+    }
+  }
+
+  if (mejor != IDLE)
+    return mejor;
+
+  return ComportamientoTecnicoNivel_1(sensores);
 }
 
 // =========================================================================
