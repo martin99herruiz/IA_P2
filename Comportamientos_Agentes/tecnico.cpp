@@ -1,5 +1,6 @@
 #include "tecnico.hpp"
 #include "motorlib/util.h"
+#include <algorithm>
 #include <iostream>
 #include <queue>
 #include <set>
@@ -218,7 +219,7 @@ Action ComportamientoTecnico::think(Sensores sensores)
 
 bool EsCaminoNivel0T(char x)
 {
-  return x == 'C' || x == 'D' || x == 'U';
+  return x == 'C' || x == 'S' || x == 'D' || x == 'U';
 }
 
 int ElegirMovimientoNivel0T(const Sensores &sensores, char i, char c, char d, const vector<vector<int>> &mapaVisitas, int ultimaFila, int ultimaCol, bool mano_derecha)
@@ -237,7 +238,7 @@ int ElegirMovimientoNivel0T(const Sensores &sensores, char i, char c, char d, co
 
   auto puntuar = [&](char casilla, pair<int, int> p, bool esCentro)
   {
-    if (!(casilla == 'C' || casilla == 'D' || casilla == 'U'))
+    if (!(casilla == 'C' || casilla == 'S' || casilla == 'D' || casilla == 'U'))
       return INF_NEG;
     if (!enRango(p))
       return INF_NEG;
@@ -262,6 +263,11 @@ int ElegirMovimientoNivel0T(const Sensores &sensores, char i, char c, char d, co
     // Bonus por seguir recto
     if (esCentro)
       score += 40;
+
+    if (casilla == 'C')
+      score += 70;
+    else if (casilla == 'S')
+      score += 10;
 
     // Penalizar un poco las vibraciones en diagonal
     if (!esCentro && (sensores.rumbo % 2 != 0))
@@ -353,6 +359,15 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
 
   if (sensores.superficie[0] == 'D')
     tiene_zapatillas = true;
+
+  if (sensores.energia <= 12)
+  {
+    last_action = IDLE;
+    ultimaPosF = sensores.posF;
+    ultimaPosC = sensores.posC;
+    return IDLE;
+  }
+
   // Detectar si el técnico lleva varios turnos sin avanzar
   bool mismaPosicion = (sensores.posF == ultimaPosF && sensores.posC == ultimaPosC);
 
@@ -388,10 +403,87 @@ Action ComportamientoTecnico::ComportamientoTecnicoNivel_0(Sensores sensores)
 
   if (sensores.superficie[0] == 'U')
   {
+    hayPlan = false;
+    plan.clear();
     last_action = IDLE;
     ultimaPosF = sensores.posF;
     ultimaPosC = sensores.posC;
     return IDLE;
+  }
+
+  if (sensores.choque)
+  {
+    hayPlan = false;
+    plan.clear();
+  }
+
+  if (hayPlan && !plan.empty())
+  {
+    Action sig = plan.front();
+    if (sig != WALK || sensores.agentes[2] != 'i')
+    {
+      plan.pop_front();
+      if (plan.empty())
+        hayPlan = false;
+      last_action = sig;
+      ultimaPosF = sensores.posF;
+      ultimaPosC = sensores.posC;
+      return sig;
+    }
+
+    hayPlan = false;
+    plan.clear();
+  }
+
+  vector<pair<int, int>> objetivos_u;
+  for (int f = 0; f < (int)mapaResultado.size(); f++)
+    for (int col = 0; col < (int)mapaResultado[f].size(); col++)
+      if (mapaResultado[f][col] == 'U')
+        objetivos_u.push_back({f, col});
+
+  if (!objetivos_u.empty() && mapaResultado.size() >= 90)
+  {
+    sort(objetivos_u.begin(), objetivos_u.end(), [&](const pair<int, int> &a, const pair<int, int> &b)
+         {
+           int da = abs(a.first - sensores.posF) + abs(a.second - sensores.posC);
+           int db = abs(b.first - sensores.posF) + abs(b.second - sensores.posC);
+           return da < db;
+         });
+
+    EstadoT inicio, fin;
+    inicio.site.f = sensores.posF;
+    inicio.site.c = sensores.posC;
+    inicio.site.brujula = sensores.rumbo;
+    inicio.zapatillas = tiene_zapatillas;
+
+    int intentos = min((int)objetivos_u.size(), 6);
+    for (int k = 0; k < intentos && plan.empty(); k++)
+    {
+      fin.site.f = objetivos_u[k].first;
+      fin.site.c = objetivos_u[k].second;
+      fin.site.brujula = sensores.rumbo;
+      fin.zapatillas = false;
+      plan = AEstrellaTecnico(inicio, fin, 5000);
+    }
+
+    hayPlan = !plan.empty();
+    if (hayPlan)
+    {
+      Action sig = plan.front();
+      if (sig != WALK || sensores.agentes[2] != 'i')
+      {
+        plan.pop_front();
+        if (plan.empty())
+          hayPlan = false;
+        last_action = sig;
+        ultimaPosF = sensores.posF;
+        ultimaPosC = sensores.posC;
+        return sig;
+      }
+
+      hayPlan = false;
+      plan.clear();
+    }
   }
 
   // Salvaguarda suave contra bucles largos: invertir mano solo en revisita alta.

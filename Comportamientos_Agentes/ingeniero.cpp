@@ -84,7 +84,7 @@ const char *NombreAccion(Action a)
  */
 bool ComportamientoIngeniero::es_camino(unsigned char c) const
 {
-  return (c == 'C' || c == 'D' || c == 'U');
+  return (c == 'C' || c == 'S' || c == 'D' || c == 'U');
 }
 
 Action ComportamientoIngeniero::think(Sensores sensores)
@@ -217,7 +217,7 @@ pair<int, int> CoordenadaSensor123I(int f, int c, Orientacion brujula, int idx)
 
 bool EsCaminoNivel0I(char x)
 {
-  return x == 'C' || x == 'D' || x == 'U';
+  return x == 'C' || x == 'S' || x == 'D' || x == 'U';
 }
 
 int ElegirMovimientoNivel0I(const Sensores &sensores, char i, char c, char d, const vector<vector<int>> &mapaVisitas, int ultimaFila, int ultimaCol, bool mano_derecha)
@@ -260,7 +260,7 @@ int ElegirMovimientoNivel0I(const Sensores &sensores, char i, char c, char d, co
 
   auto puntuar = [&](char casilla, pair<int, int> p, bool esCentro)
   {
-    if (!(casilla == 'C' || casilla == 'D' || casilla == 'U'))
+    if (!(casilla == 'C' || casilla == 'S' || casilla == 'D' || casilla == 'U'))
       return INF_NEG;
     if (!enRango(p))
       return INF_NEG;
@@ -285,6 +285,11 @@ int ElegirMovimientoNivel0I(const Sensores &sensores, char i, char c, char d, co
     // Bonus por seguir recto en mapas uniformes
     if (esCentro)
       score += 40;
+
+    if (casilla == 'C')
+      score += 70;
+    else if (casilla == 'S')
+      score += 10;
 
     // Penalizar un poco las vibraciones de giro
     if (!esCentro && (sensores.rumbo % 2 != 0))
@@ -356,6 +361,21 @@ int ElegirMovimientoNivel0I(const Sensores &sensores, char i, char c, char d, co
   return 0;
 }
 
+int VeoULejoI(const Sensores &sensores)
+{
+  if (sensores.superficie[4] == 'U' || sensores.superficie[5] == 'U' ||
+      sensores.superficie[9] == 'U' || sensores.superficie[10] == 'U' ||
+      sensores.superficie[11] == 'U')
+    return 1;
+
+  if (sensores.superficie[7] == 'U' || sensores.superficie[8] == 'U' ||
+      sensores.superficie[13] == 'U' || sensores.superficie[14] == 'U' ||
+      sensores.superficie[15] == 'U')
+    return 3;
+
+  return 0;
+}
+
 char ViablePorAlturaI(char casilla, int dif, bool zap)
 {
   if ((!zap && abs(dif) <= 1) || (zap && abs(dif) <= 2))
@@ -372,6 +392,14 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
 
   if (sensores.superficie[0] == 'D')
     tiene_zapatillas = true;
+
+  if (sensores.energia <= 12)
+  {
+    last_action = IDLE;
+    ultimaPosF = sensores.posF;
+    ultimaPosC = sensores.posC;
+    return IDLE;
+  }
 
   bool mismaPosicion = (sensores.posF == ultimaPosF && sensores.posC == ultimaPosC);
 
@@ -398,10 +426,87 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
 
   if (sensores.superficie[0] == 'U')
   {
+    hayPlan = false;
+    plan.clear();
     last_action = IDLE;
     ultimaPosF = sensores.posF;
     ultimaPosC = sensores.posC;
     return IDLE;
+  }
+
+  if (sensores.choque)
+  {
+    hayPlan = false;
+    plan.clear();
+  }
+
+  if (hayPlan && !plan.empty())
+  {
+    Action sig = plan.front();
+    if (sig != WALK || sensores.agentes[2] != 't')
+    {
+      plan.pop_front();
+      if (plan.empty())
+        hayPlan = false;
+      last_action = sig;
+      ultimaPosF = sensores.posF;
+      ultimaPosC = sensores.posC;
+      return sig;
+    }
+
+    hayPlan = false;
+    plan.clear();
+  }
+
+  vector<pair<int, int>> objetivos_u;
+  for (int f = 0; f < (int)mapaResultado.size(); f++)
+    for (int col = 0; col < (int)mapaResultado[f].size(); col++)
+      if (mapaResultado[f][col] == 'U')
+        objetivos_u.push_back({f, col});
+
+  if (!objetivos_u.empty() && mapaResultado.size() >= 90)
+  {
+    sort(objetivos_u.begin(), objetivos_u.end(), [&](const pair<int, int> &a, const pair<int, int> &b)
+         {
+           int da = abs(a.first - sensores.posF) + abs(a.second - sensores.posC);
+           int db = abs(b.first - sensores.posF) + abs(b.second - sensores.posC);
+           return da < db;
+         });
+
+    EstadoI inicio;
+    inicio.site.f = sensores.posF;
+    inicio.site.c = sensores.posC;
+    inicio.site.brujula = sensores.rumbo;
+    inicio.zapatillas = tiene_zapatillas;
+
+    int intentos = min((int)objetivos_u.size(), 6);
+    for (int k = 0; k < intentos && plan.empty(); k++)
+    {
+      ubicacion destino;
+      destino.f = objetivos_u[k].first;
+      destino.c = objetivos_u[k].second;
+      destino.brujula = sensores.rumbo;
+      plan = B_Anchura_Ingeniero(inicio, destino, mapaResultado, mapaCotas, 5000);
+    }
+
+    hayPlan = !plan.empty();
+    if (hayPlan)
+    {
+      Action sig = plan.front();
+      if (sig != WALK || sensores.agentes[2] != 't')
+      {
+        plan.pop_front();
+        if (plan.empty())
+          hayPlan = false;
+        last_action = sig;
+        ultimaPosF = sensores.posF;
+        ultimaPosC = sensores.posC;
+        return sig;
+      }
+
+      hayPlan = false;
+      plan.clear();
+    }
   }
 
   ubicacion actual;
@@ -474,8 +579,16 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
     accion = TURN_SR;
     break;
   default:
-    accion = mano_derecha ? TURN_SR : TURN_SL;
+  {
+    int posU = VeoULejoI(sensores);
+    if (posU == 1)
+      accion = TURN_SL;
+    else if (posU == 3)
+      accion = TURN_SR;
+    else
+      accion = mano_derecha ? TURN_SR : TURN_SL;
     break;
+  }
   }
 
   if (mismaPos)
@@ -1544,6 +1657,8 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
            ((mapaTuberias[fd][cd] & bit_d) != 0);
   };
 
+  for (int transiciones_n5 = 0; transiciones_n5 < 8; transiciones_n5++)
+  {
   switch (fase_n5)
   {
   case N5_PLANIFICAR:
@@ -1599,6 +1714,8 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
     it_tramo_n5 = plan_tuberias_n5.begin();
     plan_n5_inicializado = true;
     fase_n5 = N5_PREPARAR_TRAMO;
+    if (sensores.nivel == 5)
+      continue;
     return IDLE;
   }
 
@@ -1662,6 +1779,8 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
 	    n6_rescates_mov_n5 = 0;
 
     fase_n5 = N5_IR_A_POSICION_ING;
+    if (sensores.nivel == 5)
+      continue;
     return IDLE;
   }
 
@@ -1682,6 +1801,8 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
 
       hay_plan_mov_n5 = false;
       plan_mov_n5.clear();
+      if (sensores.nivel == 5)
+        continue;
       return IDLE;
     }
 
@@ -1885,11 +2006,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
 
     if (DEBUG_N5_TRACE_ING)
     {
-      cout << "[N5-ING-MOV] t=" << sensores.tiempo
-           << " pos=(" << actual.f << "," << actual.c << ")"
-           << " obj=(" << objetivo_ing_n5.f << "," << objetivo_ing_n5.c << ")"
-           << " accion=" << NombreAccion(accion)
-           << " restante=" << plan_mov_n5.size() << "\n";
+      cout << "[N5-ING-MOV] t=" << sensores.tiempo << " pos=(" << actual.f << "," << actual.c << ")"<< " obj=(" << objetivo_ing_n5.f << "," << objetivo_ing_n5.c << ")"  << " accion=" << NombreAccion(accion) << " restante=" << plan_mov_n5.size() << "\n";
     }
 
     if (plan_mov_n5.empty())
@@ -1902,9 +2019,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
   {
     auto enRangoOp = [&](int f, int c) -> bool
     {
-      return f >= 0 && !operacion_aplicada_n5.empty() &&
-             f < (int)operacion_aplicada_n5.size() &&
-             c >= 0 && c < (int)operacion_aplicada_n5[0].size();
+      return f >= 0 && !operacion_aplicada_n5.empty() &&f < (int)operacion_aplicada_n5.size() && c >= 0 && c < (int)operacion_aplicada_n5[0].size();
     };
 
     // Aplicar primero la operación planificada del origen del tramo
@@ -1921,10 +2036,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
     // Ahora sí: COME envía al Técnico a la casilla actual del Ingeniero
     if (DEBUG_N5_TRACE_ING)
     {
-      cout << "[N5-ING-COME] t=" << sensores.tiempo
-           << " desde=(" << sensores.posF << "," << sensores.posC << ")"
-           << " tec_obj=(" << paso_origen_n5.fil << "," << paso_origen_n5.col << ")"
-           << " sig_ing=(" << paso_destino_n5.fil << "," << paso_destino_n5.col << ")\n";
+      cout << "[N5-ING-COME] t=" << sensores.tiempo<< " desde=(" << sensores.posF << "," << sensores.posC << ")" << " tec_obj=(" << paso_origen_n5.fil << "," << paso_origen_n5.col << ")"  << " sig_ing=(" << paso_destino_n5.fil << "," << paso_destino_n5.col << ")\n";
     }
 
     tecnico_convocado_n5 = true;
@@ -1943,9 +2055,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
   {
     auto enRangoOp = [&](int f, int c) -> bool
     {
-      return f >= 0 && !operacion_aplicada_n5.empty() &&
-             f < (int)operacion_aplicada_n5.size() &&
-             c >= 0 && c < (int)operacion_aplicada_n5[0].size();
+      return f >= 0 && !operacion_aplicada_n5.empty() && f < (int)operacion_aplicada_n5.size() && c >= 0 && c < (int)operacion_aplicada_n5[0].size();
     };
 
     // Ejecutar únicamente la operación planificada en el destino del tramo.
@@ -1959,6 +2069,8 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
     }
 
     fase_n5 = N5_ESPERAR_TECNICO;
+    if (sensores.nivel == 5)
+      continue;
     return IDLE;
   }
 
@@ -1969,11 +2081,11 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
     {
       if (DEBUG_N5_TRACE_ING)
       {
-        cout << "[N5-ING-TRAMO-OK] t=" << sensores.tiempo
-             << " origen=(" << paso_origen_n5.fil << "," << paso_origen_n5.col << ")"
-             << " destino=(" << paso_destino_n5.fil << "," << paso_destino_n5.col << ")\n";
+        cout << "[N5-ING-TRAMO-OK] t=" << sensores.tiempo<< " origen=(" << paso_origen_n5.fil << "," << paso_origen_n5.col << ")"<< " destino=(" << paso_destino_n5.fil << "," << paso_destino_n5.col << ")\n";
       }
       fase_n5 = N5_SIGUIENTE_TRAMO;
+      if (sensores.nivel == 5)
+        continue;
       return IDLE;
     }
 
@@ -1982,17 +2094,14 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
     {
       if (DEBUG_N5_TRACE_ING)
       {
-        cout << "[N5-ING-INSTALL] t=" << sensores.tiempo
-             << " origen=(" << paso_origen_n5.fil << "," << paso_origen_n5.col << ")"
-             << " destino=(" << paso_destino_n5.fil << "," << paso_destino_n5.col << ")\n";
+        cout << "[N5-ING-INSTALL] t=" << sensores.tiempo << " origen=(" << paso_origen_n5.fil << "," << paso_origen_n5.col << ")" << " destino=(" << paso_destino_n5.fil << "," << paso_destino_n5.col << ")\n";
       }
       return INSTALL;
     }
 
     // Alinear de forma determinista hacia la casilla esperada del Técnico,
     // aunque no esté en el cono frontal inmediato.
-    if (EsAdyacenteOrtogonal(sensores.posF, sensores.posC,
-                             paso_origen_n5.fil, paso_origen_n5.col))
+    if (EsAdyacenteOrtogonal(sensores.posF, sensores.posC, paso_origen_n5.fil, paso_origen_n5.col))
     {
       Orientacion objetivo = OrientacionHacia(sensores.posF, sensores.posC,
                                               paso_origen_n5.fil, paso_origen_n5.col);
@@ -2042,6 +2151,8 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
   {
     ++it_tramo_n5;
     fase_n5 = N5_PREPARAR_TRAMO;
+    if (sensores.nivel == 5)
+      continue;
     return IDLE;
   }
 
@@ -2050,6 +2161,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
 
   case N5_TERMINADO:
     return IDLE;
+  }
   }
 
   return accion;
@@ -2126,15 +2238,9 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores
     pair<int, int> pc = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 2);
     pair<int, int> pd = CoordenadaSensor123I(sensores.posF, sensores.posC, sensores.rumbo, 3);
 
-    char vi = ViablePorAlturaI(sensores.superficie[1],
-                               sensores.cota[1] - sensores.cota[0],
-                               tiene_zapatillas);
-    char vc = ViablePorAlturaI(sensores.superficie[2],
-                               sensores.cota[2] - sensores.cota[0],
-                               tiene_zapatillas);
-    char vd = ViablePorAlturaI(sensores.superficie[3],
-                               sensores.cota[3] - sensores.cota[0],
-                               tiene_zapatillas);
+    char vi = ViablePorAlturaI(sensores.superficie[1],sensores.cota[1] - sensores.cota[0], tiene_zapatillas);
+    char vc = ViablePorAlturaI(sensores.superficie[2],  sensores.cota[2] - sensores.cota[0], tiene_zapatillas);
+    char vd = ViablePorAlturaI(sensores.superficie[3], sensores.cota[3] - sensores.cota[0], tiene_zapatillas);
 
     if (sensores.agentes[1] == 't')
       vi = 'P';
@@ -2182,8 +2288,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores
       return mejor;
     }
 
-    Orientacion objetivo = orientacion_hacia(sensores.posF, sensores.posC,
-                                             sensores.BelPosF, sensores.BelPosC);
+    Orientacion objetivo = orientacion_hacia(sensores.posF, sensores.posC, sensores.BelPosF, sensores.BelPosC);
 
     int diffCW = ((int)objetivo - (int)sensores.rumbo + 8) % 8;
     int diffCCW = ((int)sensores.rumbo - (int)objetivo + 8) % 8;
@@ -2206,9 +2311,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores
     Action sig = plan.front();
     if (sig == WALK)
     {
-      char frente = ViablePorAlturaI(sensores.superficie[2],
-                                     sensores.cota[2] - sensores.cota[0],
-                                     tiene_zapatillas);
+      char frente = ViablePorAlturaI(sensores.superficie[2], sensores.cota[2] - sensores.cota[0], tiene_zapatillas);
       if (frente == 'P' || sensores.agentes[2] == 't')
       {
         hayPlan = false;
@@ -2308,15 +2411,13 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores
     }
 
     Action por_plan = ejecutar_plan_exploracion_n6();
-    if (por_plan != IDLE)
-      return por_plan;
+    if (por_plan != IDLE) return por_plan;
 
     if ((!hayPlan || n6_cooldown_frontier == 0) && planificar_hacia_frontera_bel_n6())
     {
       n6_cooldown_frontier = 5;
       por_plan = ejecutar_plan_exploracion_n6();
-      if (por_plan != IDLE)
-        return por_plan;
+      if (por_plan != IDLE) return por_plan;
     }
     else if (!hayPlan || n6_cooldown_frontier == 0)
     {
@@ -2324,21 +2425,17 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores
     }
 
     Action guiada = accion_hacia_bel();
-    if (guiada != IDLE)
-      return guiada;
+    if (guiada != IDLE) return guiada;
     return ComportamientoIngenieroNivel_1(sensores);
   };
 
-  if (n6_cooldown_reintento > 0)
-    n6_cooldown_reintento--;
-  if (n6_cooldown_frontier > 0)
-    n6_cooldown_frontier--;
-  if (n6_cooldown_plan4 > 0)
-    n6_cooldown_plan4--;
+  if (n6_cooldown_reintento > 0) n6_cooldown_reintento--;
+  if (n6_cooldown_frontier > 0) n6_cooldown_frontier--;
+  if (n6_cooldown_plan4 > 0) n6_cooldown_plan4--;
 
   bool hayUConocida = false;
   for (int f = 0; f < (int)mapaResultado.size() && !hayUConocida; f++)
-    for (int c = 0; c < (int)mapaResultado[f].size(); c++)
+    for (int c = 0; c < (int)mapaResultado[f].size() ; c++)
       if (mapaResultado[f][c] == 'U')
       {
         hayUConocida = true;
@@ -2398,15 +2495,12 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores
     return accion;
   }
 
-  if (!hayUConocida)
-    return explorar_n6();
+  if (!hayUConocida) return explorar_n6();
 
   // Si acabamos de fallar en N5, explorar un poco antes de reintentar.
-  if (n6_cooldown_reintento > 0)
-    return explorar_n6();
+  if (n6_cooldown_reintento > 0) return explorar_n6();
 
-  if (n6_cooldown_plan4 > 0)
-    return explorar_n6();
+  if (n6_cooldown_plan4 > 0) return explorar_n6();
 
   ubicacion origen;
   origen.f = sensores.BelPosF;
