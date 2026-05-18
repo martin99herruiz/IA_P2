@@ -1,3 +1,50 @@
+// =============================================================================
+// INGENIERO.CPP — Comportamiento del agente Ingeniero
+// =============================================================================
+//
+// VISIÓN GENERAL
+// El Ingeniero es el agente principal: explora el mapa, guía a la Belkanita
+// (el personaje a escoltar) y coordina con el Técnico para instalar la red
+// de tuberías. Tiene mayor capacidad de acción que el Técnico: puede usar JUMP
+// para saltar dos casillas, DIG para excavar (bajar cota) y RAISE para elevar
+// terreno, además de COME para convocar al Técnico.
+//
+// DIFERENCIAS CLAVE INGENIERO vs TÉCNICO
+//   - Algoritmo de búsqueda: usa BFS (anchura) en lugar de A*.
+//       Razón: en N2/N3 el objetivo es alcanzar cualquier destino sin importar
+//       el coste energético (la meta es llegar, no minimizar energía). BFS
+//       garantiza el camino con MENOS pasos, que normalmente coincide con el
+//       de menos energía en mapas sin terrenos costosos.
+//   - Límite de desnivel: sin zapatillas ±1; CON zapatillas ±2.
+//       El Técnico siempre tiene límite ±1.
+//   - Tipos de terreno transitables: A(agua), H(hielo), S(arena), C, D, U, X.
+//       El Técnico sólo puede ir por C, S, D, U (y B con zapatillas).
+//   - Tiene la acción JUMP: avanza 2 casillas en línea recta.
+//   - Tiene DIG/RAISE: altera las cotas del mapa.
+//   - Tiene COME: llama al Técnico a su posición actual.
+//
+// ARQUITECTURA POR NIVELES
+//   N0: Reactivo + mano derecha + BFS cuando el mapa es suficientemente conocido
+//   N1: Reactivo con puntuación por altura (análogo al Técnico N1)
+//   N2: Deliberativo — BFS hasta la posición de la Belkanita
+//   N3: Reactivo de EVASIÓN — se aparta para no bloquear al Técnico
+//   N4: Planificación de tuberías con BFS multi-objetivo (sin moverse)
+//   N5: Máquina de 10 fases — planifica, se mueve, convoca Técnico, instala
+//   N6: Exploración con niebla + N5 cuando hay plan válido
+//
+// PROTOCOLO DE INSTALACIÓN (N5/N6)
+//   1. BuscarPlanNivel4: encuentra la ruta de tuberías óptima desde la Belkanita
+//      hasta alguna 'U', minimizando impacto ecológico.
+//   2. Por cada tramo del plan:
+//      a. Ingeniero va al extremo "origen" del tramo
+//      b. Emite COME → Técnico viene al mismo punto
+//      c. Ingeniero va al extremo "destino"
+//      d. Ajusta la cota con DIG/RAISE si es necesario
+//      e. Espera a que el Técnico emita INSTALL con sensores.enfrente
+//   3. Avanza al siguiente tramo hasta completar la red
+//
+// =============================================================================
+
 // #include "ingeniero_0_1.cpp"
 #include "ingeniero.hpp"
 #include "motorlib/util.h"
@@ -120,10 +167,44 @@ Action ComportamientoIngeniero::think(Sensores sensores)
   return accion;
 }
 
+// =============================================================================
+// NIVEL 0 — Reactivo con mano derecha + BFS cuando el mapa está descubierto
+// =============================================================================
+// Análogo al Técnico N0 pero con mano_derecha=true (prefiere girar a la derecha).
+// Usar manos distintas hace que los dos agentes exploren en sentidos opuestos,
+// reduciendo solapamiento y cubriendo el mapa más rápido.
+//
+// PRIORIDADES en ElegirMovimientoNivel0I:
+//   1. 'U' (meta) inmediata — va directo
+//   2. 'D' (zapatillas) — recoge primero si está en el camino
+//   3. Puntuación compuesta (visitas, bonus recto, tipo casilla)
+//
+// DIFERENCIAS respecto al Técnico N0:
+//   - Usa BFS en lugar de A* (coste uniforme, sin considerar energía)
+//   - Acciones disponibles: WALK, JUMP, TURN_SR, TURN_SL (el Técnico no tiene JUMP)
+//   - Mano derecha (el Técnico usa mano izquierda)
+// =============================================================================
+
 // =========================================================================
 // FUNCIONES AUXILIARES NIVELES 0
 // =========================================================================
 
+// =============================================================================
+// FUNCIÓN: MejorGiroSegunMapaI
+// Decide si girar a izquierda (1) o derecha (3) cuando no se puede avanzar.
+// Parámetros:
+//   i/d: tipo de superficie izquierda/derecha (ya filtradas por altura)
+//   vi/vd: número de visitas previas a cada casilla
+//   mi/md: tipo de superficie en el mapa guardado (para detectar '?')
+//   last_action: última acción realizada (para evitar alternar giros)
+//
+// Lógica:
+//   1. Si solo un lado es transitable → ese lado
+//   2. Si ninguno → 0 (situación de bloqueo total)
+//   3. Si ambos → menos visitado gana
+//   4. Empate → continuar el mismo giro que el turno anterior
+//      (evita el "girar derecha-izquierda-derecha" infinito)
+// =============================================================================
 int MejorGiroSegunMapaI(char i, char d, int vi, int vd, unsigned char mi, unsigned char md, Action last_action)
 {
   bool izqTransitable = (i == 'C' || i == 'D' || i == 'U');
@@ -151,6 +232,12 @@ int MejorGiroSegunMapaI(char i, char d, int vi, int vd, unsigned char mi, unsign
   return 1;
 }
 
+// =============================================================================
+// FUNCIÓN: CoordenadaSensor123I
+// Idéntica a CoordenadaSensor123T pero para el Ingeniero.
+// Convierte el índice de sensor relativo (1=izq, 2=centro, 3=der) a
+// coordenadas absolutas del mapa según el rumbo actual.
+// =============================================================================
 pair<int, int> CoordenadaSensor123I(int f, int c, Orientacion brujula, int idx)
 {
   switch (brujula)
@@ -361,6 +448,13 @@ int ElegirMovimientoNivel0I(const Sensores &sensores, char i, char c, char d, co
   return 0;
 }
 
+// =============================================================================
+// FUNCIÓN: VeoULejoI — idéntica a VeoULejoT, versión Ingeniero
+// Detecta casillas 'U' en distancias 2-3 del cono de visión.
+// Retorna 1=izquierda, 3=derecha, 0=no se ve U lejos.
+// Fallback en N0 para orientar al agente hacia la meta cuando ninguna casilla
+// inmediata tiene score positivo.
+// =============================================================================
 int VeoULejoI(const Sensores &sensores)
 {
   if (sensores.superficie[4] == 'U' || sensores.superficie[5] == 'U' ||
@@ -376,6 +470,13 @@ int VeoULejoI(const Sensores &sensores)
   return 0;
 }
 
+// =============================================================================
+// FUNCIÓN: ViablePorAlturaI
+// Filtra una casilla por diferencia de cota, igual que ViablePorAlturaT PERO
+// CON LA DIFERENCIA CLAVE: con zapatillas (zap=true) el Ingeniero puede
+// superar desniveles de ±2 (el Técnico siempre está limitado a ±1).
+// Retorna la casilla original si el desnivel es aceptable, 'P' si es demasiado.
+// =============================================================================
 char ViablePorAlturaI(char casilla, int dif, bool zap)
 {
   if ((!zap && abs(dif) <= 1) || (zap && abs(dif) <= 2))
@@ -621,6 +722,13 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_0(Sensores sensores
   return accion;
 }
 
+// =============================================================================
+// NIVEL 1 — Reactivo con altura (análogo al Técnico N1 pero con zapatillas ±2)
+// =============================================================================
+// ViablePorAlturaI: sin zapatillas |Δcota|<=1, CON zapatillas |Δcota|<=2.
+// El Ingeniero puede escalar pendientes más pronunciadas si lleva zapatillas.
+// =============================================================================
+
 // =========================================================================
 // FUNCIONES AUXILIARES NIVELES 1
 // =========================================================================
@@ -858,6 +966,21 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_1(Sensores sensores
   return accion;
 }
 
+// =============================================================================
+// NIVEL 2 — Deliberativo: BFS hasta la posición de la Belkanita
+// =============================================================================
+// En N2 el mapa es CONOCIDO y la Belkanita tiene posición fija (sensores.BelPosF/C).
+// El Ingeniero calcula un camino BFS óptimo en número de pasos y lo ejecuta.
+//
+// BFS vs A*: se usa BFS porque el coste de energía no importa en este nivel
+// (no hay límite de energía relevante). BFS garantiza el MÍNIMO número de
+// acciones, lo que es suficiente.
+//
+// Acciones consideradas en BFS: WALK, JUMP, TURN_SR, TURN_SL.
+// JUMP salta 2 casillas en línea recta: el estado final es la casilla a
+// distancia 2, pero AMBAS casillas intermedias deben ser transitables.
+// =============================================================================
+
 // =========================================================================
 // FUNCIONES AUXILIARES NIVELES 2
 // =========================================================================
@@ -867,12 +990,26 @@ bool ComportamientoIngeniero::EnRango(int f, int c, const vector<vector<unsigned
   return f >= 0 && f < (int)m.size() && c >= 0 && c < (int)m[0].size();
 }
 
+// =============================================================================
+// FUNCIÓN: EsTransitableIngeniero
+// Predicado de transitable para el BFS del Ingeniero (N2, N5, N6).
+// Incluye A(gua), H(ielo), S(arena), C(amino), D(zapatillas), U(meta), X.
+// NOTABLES DIFERENCIAS con EsTransitableNivel1T (Técnico):
+//   - El Ingeniero SÍ puede cruzar agua ('A'), hielo ('H') y sendero especial ('X')
+//   - El Ingeniero NO puede cruzar bosque ('B') en ningún caso
+//   - 'M' (muro) y 'P' (precipicio) son intransitables para ambos
+// =============================================================================
 bool EsTransitableIngeniero(unsigned char cas)
 {
   return cas == 'A' || cas == 'H' || cas == 'S' || cas == 'C' ||
          cas == 'D' || cas == 'U' || cas == 'X';
 }
 
+// =============================================================================
+// FUNCIÓN: NextCasillaIngeniero
+// Calcula la casilla INMEDIATAMENTE delante (1 paso) sin verificar validez.
+// Desplazamiento según brujula, igual que NextCasillaTecnico.
+// =============================================================================
 ComportamientoIngeniero::EstadoI ComportamientoIngeniero::NextCasillaIngeniero(const EstadoI &st)
 {
   EstadoI siguiente = st;
@@ -912,12 +1049,25 @@ ComportamientoIngeniero::EstadoI ComportamientoIngeniero::NextCasillaIngeniero(c
   return siguiente;
 }
 
+// =============================================================================
+// FUNCIÓN: NextCasillaIngeniero2
+// Calcula la casilla a 2 pasos en línea recta (para JUMP).
+// JUMP avanza 2 casillas en la misma dirección: aplica NextCasillaIngeniero
+// dos veces. El estado resultante es la casilla destino del salto.
+// =============================================================================
 ComportamientoIngeniero::EstadoI ComportamientoIngeniero::NextCasillaIngeniero2(const EstadoI &st)
 {
   EstadoI aux = NextCasillaIngeniero(st);
   return NextCasillaIngeniero(aux);
 }
 
+// =============================================================================
+// FUNCIÓN: CasillaAccesibleIngeniero
+// Comprueba si el WALK es válido: la casilla de delante existe, es transitable
+// y el desnivel es aceptable (±1 sin zap, ±2 con zap).
+// Parámetros terreno/altura permiten pasarle el mapa actual o una copia
+// modificada temporalmente (p.ej. con un agente marcado como 'M').
+// =============================================================================
 bool ComportamientoIngeniero::CasillaAccesibleIngeniero(const EstadoI &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura)
 {
   EstadoI next = NextCasillaIngeniero(st);
@@ -934,6 +1084,15 @@ bool ComportamientoIngeniero::CasillaAccesibleIngeniero(const EstadoI &st, const
   return diff <= maxDiff;
 }
 
+// =============================================================================
+// FUNCIÓN: CasillaAccesibleJumpIngeniero
+// Comprueba si el JUMP es válido. Para ello:
+//   1. La casilla INTERMEDIA (a 1 paso) debe ser transitable por tipo.
+//   2. La casilla DESTINO (a 2 pasos) debe ser transitable por tipo.
+//   3. El desnivel entre ORIGEN y DESTINO debe ser ±maxDiff (sin ignorar la intermedia).
+// Nota: el desnivel se mide sólo entre el origen y el destino final, no con
+// la casilla intermedia — el Ingeniero "vuela" sobre ella.
+// =============================================================================
 bool ComportamientoIngeniero::CasillaAccesibleJumpIngeniero(const EstadoI &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura)
 {
   EstadoI inter = NextCasillaIngeniero(st);
@@ -961,6 +1120,16 @@ bool ComportamientoIngeniero::CasillaAccesibleJumpIngeniero(const EstadoI &st, c
   return true;
 }
 
+// =============================================================================
+// FUNCIÓN: applyI
+// Análogo a ApplyTecnico pero para el Ingeniero y con parámetros de terreno/altura.
+// Aplica la acción al estado y retorna el estado resultante.
+// WALK:    avanza si es accesible; si no, retorna el mismo estado (sin efecto).
+// JUMP:    avanza 2 pasos si es accesible; si no, sin efecto.
+// TURN_SR: brujula = (brujula + 1) % 8
+// TURN_SL: brujula = (brujula + 7) % 8
+// En todos los casos, si la casilla destino es 'D' → activa zapatillas.
+// =============================================================================
 ComportamientoIngeniero::EstadoI ComportamientoIngeniero::applyI(Action accion, const EstadoI &st, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura)
 {
   EstadoI next = st;
@@ -999,6 +1168,28 @@ ComportamientoIngeniero::EstadoI ComportamientoIngeniero::applyI(Action accion, 
   return next;
 }
 
+// =============================================================================
+// FUNCIÓN: B_Anchura_Ingeniero — BFS (Búsqueda en Anchura)
+// Encuentra el camino de MENOR NÚMERO DE ACCIONES desde inicio hasta destino.
+//
+// Estructuras:
+//   frontier:    cola FIFO con los nodos por expandir (garantiza BFS)
+//   explored:    set de nodos ya expandidos (evita reexpansión)
+//   en_frontera: set de estados en la frontera (evita duplicados en la cola)
+//
+// Condición de éxito: estado actual tiene la misma (f,c) que destino
+//   (la orientación de llegada no importa).
+//
+// Acciones generadas: WALK, JUMP, TURN_SR, TURN_SL.
+//   Se filtran WALK/JUMP si al aplicarlos el estado no cambia (casilla no accesible).
+//
+// max_expansiones: límite para evitar búsquedas largas en N0 y N6.
+//   -1 = sin límite (N2, N3 con mapa conocido).
+//
+// La secuencia de acciones se copia en cada NodoI hijo. Para planes cortos
+// es eficiente; en planes muy largos (>1000 acciones) puede ser costoso en
+// memoria. En la práctica los mapas son <=128×128 y los planes son manejables.
+// =============================================================================
 list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio, const ubicacion &destino, const vector<vector<unsigned char>> &terreno, const vector<vector<unsigned char>> &altura, int max_expansiones)
 {
   list<Action> path;
@@ -1112,6 +1303,24 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_2(Sensores sensores
   return accion;
 }
 
+// =============================================================================
+// NIVEL 3 — Reactivo de EVASIÓN: el Ingeniero se aparta del Técnico
+// =============================================================================
+// En N3 el TÉCNICO es el agente principal (navega con A* hasta la Belkanita).
+// El Ingeniero tiene el rol PASIVO de no obstruir al Técnico.
+//
+// Lógica de evasión:
+//   1. Si está encima de la Belkanita → avanzar o girar para liberarla
+//   2. Si ya está ejecutando un escape → completarlo
+//   3. Si detecta al Técnico en cualquiera de los 15 sensores:
+//      - Técnico a la DERECHA → giramos izquierda (plan_escape=-1)
+//      - Técnico en centro o izquierda → giramos derecha (plan_escape=+1)
+//      Tras el giro, si hay casilla transitable delante → WALK (se aparta)
+//   4. Sin técnico visible → IDLE (máximo respeto a la batería)
+//
+// plan_escape: +1=girar derecha, -1=girar izquierda, 0=sin escape activo
+// =============================================================================
+
 // =========================================================================
 // FUNCIONES AUXILIARES NIVELES 3
 // =========================================================================
@@ -1202,16 +1411,63 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_3(Sensores sensores
   return IDLE;
 }
 
+// =============================================================================
+// NIVEL 4 — Planificación de red de tuberías (sin movimiento del agente)
+// =============================================================================
+// En N4 el objetivo es encontrar la ruta óptima de TUBERÍAS desde la posición
+// de la Belkanita (origen) hasta alguna casilla 'U' (meta), minimizando el
+// impacto ecológico total.
+//
+// ALGORITMO: BuscarPlanNivel4 — BFS multiobjetivo con dominancia de Pareto
+//
+//   Estado: (fila, columna, altura_efectiva)
+//   Se expanden los 4 vecinos ortogonales. Para cada vecino se prueban
+//   3 operaciones: DIG (-1), sin cambio (0), RAISE (+1).
+//   Un tramo es válido si respeta la GRAVEDAD:
+//     h_origen == h_destino  OR  h_origen == h_destino + 1
+//     (el agua fluye hacia abajo o en llano, nunca cuesta arriba)
+//
+//   IMPACTO ECOLÓGICO (coste):
+//     Cada tramo (par de casillas) suma:
+//       ImpactoInstallCasilla(origen) + ImpactoInstallCasilla(destino)
+//       + ImpactoOperacionCasilla(casilla, op)
+//     Los terrenos 'A' (agua) y 'H' (hielo) tienen impacto muy alto.
+//     No se puede DIG/RAISE en agua ('A').
+//
+//   DOMINANCIA DE PARETO:
+//     Para cada estado (f,c,h) se mantienen etiquetas (installs, impacto).
+//     Un nodo se poda si ya existe otro con ≤installs Y ≤impacto (dominado).
+//     Esto reduce exponencialmente el espacio de búsqueda.
+//
+//   CRITERIO DE ÉXITO: llegar a una casilla 'U' con el menor número de
+//   tramos y, en caso de empate, menor impacto ecológico.
+//
+// En N4 puro el agente siempre devuelve IDLE (sólo calcula y visualiza el plan).
+// En N5 y N6 el plan calculado se EJECUTA tramo a tramo.
+// =============================================================================
+
 // =========================================================================
 // FUNCIONES AUXILIARES NIVELES 4
 // =========================================================================
 
+// =============================================================================
+// FUNCIÓN: DentroMapa
+// Comprueba que (f,c) están dentro de los límites del mapa cargado.
+// Usado como guarda antes de cualquier acceso a mapaResultado o mapaCotas.
+// =============================================================================
 bool ComportamientoIngeniero::DentroMapa(int f, int c) const
 {
   return f >= 0 && f < mapaResultado.size() &&
          c >= 0 && c < mapaResultado[0].size();
 }
 
+// =============================================================================
+// FUNCIÓN: CasillaValidaParaTuberia
+// Decide si una casilla puede formar parte de la red de tuberías planificada.
+// Excluye: precipicios 'P', muros 'M', desconocidas '?', bosque 'B'.
+// El bosque se excluye porque el Ingeniero no puede posicionarse en él para
+// hacer el COME/INSTALL, y la Belkanita tampoco puede atravesarlo.
+// =============================================================================
 bool ComportamientoIngeniero::CasillaValidaParaTuberia(int f, int c) const
 {
   if (!DentroMapa(f, c))
@@ -1228,6 +1484,15 @@ bool ComportamientoIngeniero::CasillaValidaParaTuberia(int f, int c) const
   return true;
 }
 
+// =============================================================================
+// FUNCIÓN: OperacionValidaEnCasilla
+// Comprueba si se puede aplicar la operación op en la casilla (f,c).
+//   op = 0  → no hacer nada (siempre válido)
+//   op = 1  → RAISE (elevar cota): válido si terreno != 'A' y cota < 9
+//   op = -1 → DIG   (excavar): válido si terreno != 'A' y cota > 1
+// El agua ('A') es inalterable: no se puede excavar ni elevar el fondo del mar.
+// Las cotas van de 1 a 9. No se puede subir de 9 ni bajar de 1.
+// =============================================================================
 bool ComportamientoIngeniero::OperacionValidaEnCasilla(int f, int c, int op) const
 {
   if (!DentroMapa(f, c))
@@ -1244,13 +1509,26 @@ bool ComportamientoIngeniero::OperacionValidaEnCasilla(int f, int c, int op) con
     return false;
 
   if (op == 1)
-    return h < 9; // RAISE
+    return h < 9; // RAISE: sólo si no hemos llegado al máximo
   if (op == -1)
-    return h > 1; // DIG
+    return h > 1; // DIG: sólo si no hemos llegado al mínimo
 
   return false;
 }
 
+// =============================================================================
+// FUNCIÓN: ImpactoInstallCasilla
+// Coste ecológico de INSTALAR un tramo de tubería que pasa por la casilla (f,c).
+// El motor cobra este impacto DOS VECES por tramo: una por el extremo origen y
+// otra por el extremo destino. Por eso el BFS acumula Impacto(origen)+Impacto(destino)
+// al expandir cada tramo nuevo.
+// Jerarquía de impacto (mayor = más caro ecológicamente):
+//   Agua 'A' → 50   (alterar el ecosistema acuático es muy dañino)
+//   Hielo 'H'→ 45   (ecosistema frágil)
+//   Arena 'S'→ 25
+//   Camino/Meta → 15 (terreno ya intervenido, menor impacto)
+//   Resto → 30
+// =============================================================================
 int ComportamientoIngeniero::ImpactoInstallCasilla(int f, int c) const
 {
   unsigned char t = mapaResultado[f][c];
@@ -1271,6 +1549,15 @@ int ComportamientoIngeniero::ImpactoInstallCasilla(int f, int c) const
   }
 }
 
+// =============================================================================
+// FUNCIÓN: ImpactoOperacionCasilla
+// Coste ecológico de aplicar una operación (DIG/RAISE) sobre la casilla.
+// op = 0  → 0 (no tocar el terreno no tiene coste)
+// op = 1  → RAISE: coste según terreno (hielo=55, arena=30, camino=10, resto=40)
+// op = -1 → DIG:   coste según terreno (hielo=65, arena=40, camino=25, resto=50)
+// DIG siempre cuesta más que RAISE porque excavar altera más el ecosistema.
+// El hielo y la arena son más costosos de modificar que el camino (ya intervenido).
+// =============================================================================
 int ComportamientoIngeniero::ImpactoOperacionCasilla(int f, int c, int op) const
 {
   if (op == 0)
@@ -1313,6 +1600,13 @@ int ComportamientoIngeniero::ImpactoOperacionCasilla(int f, int c, int op) const
   return 0;
 }
 
+// =============================================================================
+// FUNCIÓN: YaEnPlan
+// Comprueba si la casilla (f,c) ya aparece en el plan de tuberías.
+// Evita que la misma casilla aparezca dos veces en la ruta (bucles).
+// No se usa en la versión actual de BuscarPlanNivel4 (el BFS + dominancia
+// evita ciclos), pero puede ser útil para restricciones adicionales.
+// =============================================================================
 bool ComportamientoIngeniero::YaEnPlan(const list<Paso> &plan, int f, int c) const
 {
   for (const auto &p : plan)
@@ -1322,11 +1616,25 @@ bool ComportamientoIngeniero::YaEnPlan(const list<Paso> &plan, int f, int c) con
   return false;
 }
 
+// =============================================================================
+// FUNCIÓN: ConexionValidaPorGravedad
+// Regla física de la tubería: el agua fluye por gravedad, por lo que sólo
+// puede ir de h_actual a h_siguiente si h_siguiente >= h_actual - 1.
+// Es decir: se permite nivel igual (h_actual == h_siguiente) o descenso de 1
+// (h_actual == h_siguiente + 1). NO se permiten ascensos: el agua no sube sola.
+// Esta restricción asegura que la Belkanita (el fluido) puede recorrer la tubería
+// desde el origen hasta la meta.
+// =============================================================================
 bool ConexionValidaPorGravedad(int h_actual, int h_siguiente)
 {
   return (h_actual == h_siguiente || h_actual == h_siguiente + 1);
 }
 
+// BuscarPlanNivel4: BFS multicriterio con poda por dominancia de Pareto.
+// origen: posición de la Belkanita (comienzo de la tubería).
+// maxImpacto: presupuesto ecológico disponible (max_ecologico - ecologico_actual).
+// maxNodos: límite de expansiones (-1 = sin límite).
+// Devuelve la lista de Paso que forma la ruta óptima hasta alguna 'U'.
 list<ComportamientoIngeniero::Paso> ComportamientoIngeniero::BuscarPlanNivel4(const ubicacion &origen, int maxImpacto, int maxNodos)
 {
   list<Paso> vacio;
@@ -1334,13 +1642,14 @@ list<ComportamientoIngeniero::Paso> ComportamientoIngeniero::BuscarPlanNivel4(co
   struct Nodo
   {
     int f, c;
-    int h;        // altura efectiva de esta casilla en el plan
-    int installs; // nº de tramos añadidos después del origen
-    int impacto;
+    int h;        // altura efectiva de esta casilla en el plan (tras op)
+    int installs; // número de tramos instalados hasta aquí
+    int impacto;  // impacto ecológico acumulado
     list<Paso> plan;
   };
 
-  queue<Nodo> abiertos;
+  queue<Nodo> abiertos; // BFS: FIFO garantiza exploración por número de tramos
+  // etiquetas[(f,c,h)] → lista de (installs,impacto) ya explorados con dominancia Pareto
   map<tuple<int, int, int>, vector<pair<int, int>>> etiquetas;
   int mejor_installs_u = INT_MAX;
   int mejor_impacto_u = INT_MAX;
@@ -1525,20 +1834,87 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_4(Sensores sensores
   return IDLE;
 }
 
+// =============================================================================
+// NIVEL 5 — Máquina de 10 fases: instalación cooperativa de tuberías
+// =============================================================================
+// El Ingeniero dirige la instalación. Las 10 fases son:
+//
+//  N5_PLANIFICAR:
+//    Llama a BuscarPlanNivel4 para obtener la lista de "pasos" (tramos).
+//    Si el primer tramo asciende (h0 < h1), INVIERTE el plan completo para
+//    recorrerlo de mayor a menor cota (el agua cae hacia abajo).
+//    Transición → N5_PREPARAR_TRAMO
+//
+//  N5_PREPARAR_TRAMO:
+//    Toma el tramo actual (it_tramo_n5) y el siguiente (it_tramo_n5+1).
+//    Define paso_origen_n5 (donde estará el Técnico) y
+//    paso_destino_n5 (donde estará el Ingeniero para instalar).
+//    Transición → N5_IR_A_POSICION_ING
+//
+//  N5_IR_A_POSICION_ING:
+//    El Ingeniero navega con BFS hasta objetivo_ing_n5.
+//    Si el Técnico bloquea el camino, gira a la derecha y recalcula.
+//    Transición → N5_LLAMAR_TECNICO (si no convocó aún)
+//                 N5_AJUSTAR_TERRENO (si ya convocó y llegó al destino)
+//
+//  N5_LLAMAR_TECNICO:
+//    Primero aplica la operación del ORIGEN (DIG/RAISE si op!=0).
+//    Luego emite COME → el Técnico recibirá venpaca=true y vendrá al punto.
+//    El Ingeniero se recoloca en paso_destino.
+//    Transición → N5_IR_A_POSICION_ING (para ir al destino)
+//
+//  N5_AJUSTAR_TERRENO:
+//    Aplica la operación del DESTINO (DIG/RAISE si op!=0).
+//    Transición → N5_ESPERAR_TECNICO
+//
+//  N5_ESPERAR_TECNICO:
+//    Espera hasta que TramoYaInstalado() devuelva true (el motor confirma la
+//    instalación consultando mapaTuberias[]).
+//    Si sensores.enfrente=true (ambos enfrentados) → emite INSTALL.
+//    Si el Técnico no está orientado → gira hacia el punto de origen.
+//    Timeout de 900 turnos → N5_TERMINADO (evita bloqueo infinito).
+//    Transición → N5_SIGUIENTE_TRAMO
+//
+//  N5_SIGUIENTE_TRAMO:
+//    Avanza el iterador del plan al siguiente tramo.
+//    Transición → N5_PREPARAR_TRAMO
+//
+//  N5_TERMINADO:
+//    La red está instalada o no se pudo completar. Devuelve IDLE para siempre.
+//
+// Nota: en N6 las fases son idénticas pero con límites de BFS más altos y
+// la posibilidad de usar avance_local_ingeniero_n6 cuando BFS no encuentra plan
+// (el mapa aún no está completamente descubierto).
+// =============================================================================
+
 // =========================================================================
 // FUNCIONES AUXILIARES NIVELES 5
 // =========================================================================
 
+// =============================================================================
+// FUNCIÓN: MismaCasilla (Ingeniero) — idéntica a la versión del Técnico.
+// Comprueba si una ubicación coincide con (f,c), ignorando la orientación.
+// =============================================================================
 bool ComportamientoIngeniero::MismaCasilla(const ubicacion &u, int f, int c) const
 {
   return u.f == f && u.c == c;
 }
 
+// =============================================================================
+// FUNCIÓN: EsAdyacenteOrtogonal (Ingeniero) — idéntica a la versión del Técnico.
+// Distancia Manhattan == 1: los dos agentes están en casillas vecinas ortogonales.
+// Necesario para INSTALL: Ingeniero y Técnico deben estar en celdas adyacentes.
+// =============================================================================
 bool ComportamientoIngeniero::EsAdyacenteOrtogonal(int f1, int c1, int f2, int c2) const
 {
   return (abs(f1 - f2) + abs(c1 - c2)) == 1;
 }
 
+// =============================================================================
+// FUNCIÓN: OrientacionHacia (Ingeniero) — idéntica a la versión del Técnico.
+// Calcula la orientación cardinal que debe tener el agente en (f1,c1) para
+// mirar hacia la casilla ortogonalmente adyacente (f2,c2).
+// =============================================================================
 Orientacion ComportamientoIngeniero::OrientacionHacia(int f1, int c1, int f2, int c2) const
 {
   if (f2 == f1 - 1 && c2 == c1)
@@ -1553,6 +1929,12 @@ Orientacion ComportamientoIngeniero::OrientacionHacia(int f1, int c1, int f2, in
   return norte; // no debería ocurrir si el tramo es ortogonal
 }
 
+// =============================================================================
+// FUNCIÓN: AgenteEnObjetivo
+// Comprueba si la ubicación u coincide con obj en (f,c).
+// Igual que MismaCasilla pero tomando dos ubicaciones completas.
+// Se usa en N5 para detectar que el Ingeniero llegó a su posición de instalación.
+// =============================================================================
 bool ComportamientoIngeniero::AgenteEnObjetivo(const ubicacion &u, const ubicacion &obj) const
 {
   return u.f == obj.f && u.c == obj.c;
@@ -2166,11 +2548,40 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
 
   return accion;
 }
-/**
- * @brief Comportamiento del ingeniero para el Nivel 6.
- * @param sensores Datos actuales de los sensores.
- * @return Acción a realizar.
- */
+// =============================================================================
+// NIVEL 6 — Niebla de guerra: exploración + instalación cuando el mapa es
+//            suficientemente conocido
+// =============================================================================
+// N6 es el nivel más complejo. El mapa tiene NIEBLA: sólo se conoce lo que
+// ha sido visto antes. El Ingeniero debe explorar para descubrir las 'U'.
+//
+// ESTRATEGIA GENERAL:
+//   1. Buscar la Belkanita (n6_buscando_bel): moverse hacia BelPosF/C usando
+//      greedy de distancia Manhattan hasta estar a distancia <=2.
+//      Límite de 700 pasos para evitar bucle de búsqueda.
+//
+//   2. Explorar fronteras (planificar_hacia_frontera_bel_n6):
+//      Busca casillas transitables con al menos un vecino '?' (frontera del
+//      conocimiento), ordenadas por (dist_Belkanita + dist_actual).
+//      Lanza BFS hacia las 28 mejores candidatas (límite 4000 expansiones c/u).
+//
+//   3. Intentar plan N4 (BuscarPlanNivel4):
+//      Cada 25 turnos (n6_cooldown_plan4) evalúa si hay un plan de tuberías
+//      válido con el mapa conocido hasta ahora.
+//      Si lo hay → activa n6_ejecutando_n5 y delega en N5.
+//
+//   4. Si N5 falla (fase_n5 == N5_TERMINADO):
+//      Vuelve a exploración con cooldown de 70 turnos antes de reintentar.
+//
+//   5. Fallback: ComportamientoIngenieroNivel_1 (reactivo básico).
+//
+// VARIABLES DE CONTROL:
+//   n6_ejecutando_n5     → true mientras está ejecutando la máquina N5
+//   n6_cooldown_reintento → turnos de espera tras un fallo de N5
+//   n6_cooldown_plan4    → cooldown entre intentos de BuscarPlanNivel4
+//   n6_buscando_bel      → true mientras intentamos aproximarnos a la Belkanita
+//   n6_pasos_busca_bel   → contador de pasos en modo búsqueda Belkanita
+// =============================================================================
 Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores)
 {
   // Nivel 6: primero explorar (hay niebla), después reutilizar la
@@ -2550,10 +2961,14 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_6(Sensores sensores
 // FUNCIONES PROPORCIONADAS
 // =========================================================================
 
-/**
- * @brief Actualiza el mapaResultado y mapaCotas con la información de los sensores.
- * @param sensores Datos actuales de los sensores.
- */
+// =============================================================================
+// FUNCIÓN: ActualizarMapa (Ingeniero)
+// Misma función que en el Técnico: copia los datos del cono de visión al mapa.
+// EXTRA EN INGENIERO: en N5 se llama también para mantener sincronizadas las
+// cotas tras ejecutar DIG/RAISE. El Ingeniero modifica el terreno y necesita
+// que mapaCotas refleje los cambios para que el BFS de movimiento calcule
+// correctamente los desniveles en turnos posteriores.
+// =============================================================================
 void ComportamientoIngeniero::ActualizarMapa(Sensores sensores)
 {
   mapaResultado[sensores.posF][sensores.posC] = sensores.superficie[0];
@@ -2725,26 +3140,28 @@ void ComportamientoIngeniero::ActualizarMapa(Sensores sensores)
   }
 }
 
-/**
- * @brief Determina si una casilla es transitable para el ingeniero.
- * @param f Fila de la casilla.
- * @param c Columna de la casilla.
- * @param tieneZapatillas Indica si el agente posee las zapatillas.
- * @return true si la casilla es transitable (no es muro ni precipicio).
- */
+// =============================================================================
+// FUNCIÓN: EsCasillaTransitableLevel0 (Ingeniero)
+// Versión reactiva de transitable: consulta es_camino (C/S/D/U).
+// MISMA IMPLEMENTACIÓN que la del Técnico (ambos usan es_camino en N0/N1).
+// El parámetro tieneZapatillas existe por simetría pero no se usa:
+// en los niveles reactivos (0 y 1), el bosque nunca se considera transitable.
+// =============================================================================
 bool ComportamientoIngeniero::EsCasillaTransitableLevel0(int f, int c, bool tieneZapatillas)
 {
   if (f < 0 || f >= mapaResultado.size() || c < 0 || c >= mapaResultado[0].size())
     return false;
-  return es_camino(mapaResultado[f][c]); // Solo 'C', 'D', 'U' son transitables en Nivel 0
+  return es_camino(mapaResultado[f][c]); // Solo 'C', 'S', 'D', 'U' son transitables en N0
 }
 
-/**
- * @brief Comprueba si la casilla de delante es accesible por diferencia de altura.
- * Para el ingeniero: desnivel máximo 1 sin zapatillas, 2 con zapatillas.
- * @param actual Estado actual del agente (fila, columna, orientacion, zap).
- * @return true si el desnivel con la casilla de delante es admisible.
- */
+// =============================================================================
+// FUNCIÓN: EsAccesiblePorAltura (Ingeniero)
+// DIFERENCIA CLAVE con la versión del Técnico: recibe el parámetro 'zap'.
+//   sin zapatillas: desnivel máximo ±1
+//   con zapatillas: desnivel máximo ±2
+// Usada en los niveles reactivos (N0, N3) y en algunos checks de N5.
+// El BFS de N2/N5 usa su propia lógica inline en CasillaAccesibleIngeniero.
+// =============================================================================
 bool ComportamientoIngeniero::EsAccesiblePorAltura(const ubicacion &actual, bool zap)
 {
   ubicacion del = Delante(actual);
@@ -2758,12 +3175,11 @@ bool ComportamientoIngeniero::EsAccesiblePorAltura(const ubicacion &actual, bool
   return true;
 }
 
-/**
- * @brief Devuelve la posición (fila, columna) de la casilla que hay delante del agente.
- * Calcula la casilla frontal según la orientación actual (8 direcciones).
- * @param actual Estado actual del agente (fila, columna, orientacion).
- * @return Estado con la fila y columna de la casilla de enfrente.
- */
+// =============================================================================
+// FUNCIÓN: Delante (Ingeniero)
+// Idéntica a la del Técnico: calcula la casilla frontal según orientación.
+// Ver comentario en tecnico.cpp para la tabla de desplazamientos.
+// =============================================================================
 ubicacion ComportamientoIngeniero::Delante(const ubicacion &actual) const
 {
   ubicacion delante = actual;
@@ -2801,11 +3217,20 @@ ubicacion ComportamientoIngeniero::Delante(const ubicacion &actual) const
   return delante;
 }
 
-/**
- * @brief Imprime por consola la secuencia de acciones de un plan.
- *
- * @param plan  Lista de acciones del plan.
- */
+// =============================================================================
+// PintaPlan (sobrecarga 1: lista de Action)
+// =============================================================================
+// Vuelca en cout la secuencia de acciones del plan de movimiento del Ingeniero,
+// usando abreviaturas de un carácter para facilitar la depuración visual:
+//   W=WALK  J=JUMP  r=TURN_SR  l=TURN_SL  C=COME  I=IDLE  -_=desconocida
+//
+// Uso habitual: llamar justo después de B_Anchura_Ingeniero() para ver qué
+// plan se ha generado antes de ejecutarlo paso a paso.
+//
+// Esta función es SOLO de depuración; no afecta al comportamiento del agente
+// ni al plan almacenado. Eliminarla o modificar su output no cambia ningún
+// nivel. Al final imprime la longitud total "(longitud N)".
+// =============================================================================
 void ComportamientoIngeniero::PintaPlan(const list<Action> &plan)
 {
   auto it = plan.begin();
@@ -2844,12 +3269,21 @@ void ComportamientoIngeniero::PintaPlan(const list<Action> &plan)
   cout << "( longitud " << plan.size() << ")" << endl;
 }
 
-/**
- * @brief Imprime las coordenadas y operaciones de un plan de tubería.
- *
- * @param plan  Lista de pasos (fila, columna, operación),
- *              donde operacion = -1 (DIG), operación = 1 (RAISE).
- */
+// =============================================================================
+// PintaPlan (sobrecarga 2: lista de Paso / plan de tuberías)
+// =============================================================================
+// Vuelca en cout el plan de tuberías generado por BuscarPlanNivel4().
+// Cada Paso contiene:
+//   fil, col  — coordenadas de la casilla del tramo
+//   op        — operación de ajuste de cota: -1 = DIG (bajar 1), +1 = RAISE (subir 1), 0 = sin cambio
+//
+// La resolución es 1 Paso por casilla de la tubería; no hay información de
+// ruta de movimiento del Ingeniero (eso es el plan de BFS de N5).
+//
+// NOTA EXAMEN: Si la pregunta pide "imprime el coste acumulado", añadir un
+// acumulador aquí es suficiente — `op == -1` cuesta ImpactoInstallCasilla()
+// más ImpactoOperacionCasilla(), `op == 0` solo ImpactoInstallCasilla().
+// =============================================================================
 void ComportamientoIngeniero::PintaPlan(const list<ComportamientoIngeniero::Paso> &plan)
 {
   auto it = plan.begin();
@@ -2861,13 +3295,35 @@ void ComportamientoIngeniero::PintaPlan(const list<ComportamientoIngeniero::Paso
   cout << "( longitud " << plan.size() << ")" << endl;
 }
 
-/**
- * @brief Convierte un plan de acciones en una lista de casillas para
- *        su visualización en el mapa 2D.
- *
- * @param st    Estado de partida.
- * @param plan  Lista de acciones del plan.
- */
+// =============================================================================
+// VisualizaPlan
+// =============================================================================
+// Simula la ejecución del plan de movimiento desde `st` y construye
+// `listaPlanCasillas` — la lista que el motor gráfico usa para pintar la
+// ruta prevista encima del mapa 2D.
+//
+// Proceso: replica el desplazamiento de cada acción sobre una copia local
+// del estado `cst`, añadiendo cada casilla alcanzada a la lista. Los giros
+// (TURN_SR/TURN_SL) sólo cambian la brújula sin añadir casilla. El primer
+// elemento siempre es la casilla de inicio.
+//
+// Tabla de desplazamientos (idéntica a Delante()):
+//   brujula 0(N):(f-1,c)  1(NE):(f-1,c+1)  2(E):(f,c+1)  3(SE):(f+1,c+1)
+//           4(S):(f+1,c)  5(SO):(f+1,c-1)  6(O):(f,c-1)  7(NO):(f-1,c-1)
+//
+// JUMP y WALK usan exactamente el mismo desplazamiento (ambos avanzan 1
+// casilla en la dirección actual); la diferencia entre ellos está en las
+// restricciones de altura de CasillaAccesible*(), no en el desplazamiento.
+//
+// Las casillas fuera de los límites del mapa se omiten (guarda de seguridad).
+//
+// NOTA EXAMEN: Esta función NO valida si el plan es realmente ejecutable —
+// es pura presentación. Si el plan contiene errores de altura, la ruta
+// se pintará igualmente. No modificar para "validar" el plan; usar
+// CasillaAccesibleIngeniero() para eso.
+//
+// Esta función es pura visualización; no afecta al agente ni al plan.
+// =============================================================================
 void ComportamientoIngeniero::VisualizaPlan(const ubicacion &st,
                                             const list<Action> &plan)
 {
@@ -2964,11 +3420,30 @@ void ComportamientoIngeniero::VisualizaPlan(const ubicacion &st,
   }
 }
 
-/**
- * @brief Convierte un plan de tubería en la lista de casillas usada por el sistema de visualización.
- * @param st    Estado de partida (no utilizado directamente).
- * @param plan  Lista de pasos del plan de tubería.
- */
+// =============================================================================
+// VisualizaRedTuberias
+// =============================================================================
+// Copia el plan de tuberías (lista de Paso) en `listaCanalizacionTuberias`,
+// el contenedor que el motor gráfico usa para dibujar la red de tuberías
+// sobre el mapa 2D con colores distintos según la operación (op).
+//
+// Estructura de cada entrada resultante: {fil, col, op}
+//   op = -1  → casilla requiere DIG  (se pinta de un color)
+//   op =  0  → casilla sin operación (se pinta de otro color)
+//   op = +1  → casilla requiere RAISE (se pinta de otro color)
+//
+// Se limpia la lista (`clear()`) antes de rellenarla, así que cada llamada
+// reemplaza por completo la visualización anterior. Esto es correcto porque
+// BuscarPlanNivel4 sólo se ejecuta una vez (N4) o al inicio de N5; no se
+// recalcula en cada turno.
+//
+// NOTA EXAMEN: Si la pregunta pide añadir un criterio visual extra (p.ej.,
+// marcar con op=2 las casillas de agua), basta con asignar `it->op` a un
+// valor distinto antes de hacer push_back. El motor gráfico lo interpretará
+// con el color correspondiente al campo `op` de CasillasCamino.
+//
+// Esta función es pura visualización; no afecta al agente ni al plan.
+// =============================================================================
 void ComportamientoIngeniero::VisualizaRedTuberias(const list<ComportamientoIngeniero::Paso> &plan)
 {
   listaCanalizacionTuberias.clear();

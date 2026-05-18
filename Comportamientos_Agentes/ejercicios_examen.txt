@@ -1,0 +1,617 @@
+================================================================================
+EJERCICIOS DE EXAMEN/DEFENSA — PRÁCTICA 2 IA 2025-26
+Compilados de casos reales de compañeros
+================================================================================
+
+AVISO PREVIO IMPORTANTE
+------------------------
+"Tu examen se ajusta a lo que entregaste."
+- Si te pasan los 3 casos ocultos del último nivel → la pregunta es de ese nivel.
+- Si usas funciones lambda o estructuras avanzadas → una pregunta será sobre ellas.
+- Si el Técnico N5 reutiliza A* de N3 → basta tocar una función para afectar ambos.
+  Si NO los reutilizas → te pedirán implementarlo dos veces.
+
+En esta entrega:
+  · Técnico usa A* (AEstrellaTecnico) compartido entre N3, N5 y N6.
+  · Ingeniero usa BFS (B_Anchura_Ingeniero) compartido entre N2 y N5.
+  · La modificación de EsAccionAplicableTecnico afecta a todos los niveles
+    que llamen a AEstrellaTecnico.
+
+================================================================================
+EJERCICIO 1 — Técnico obligado a pasar por al menos una casilla 'H' (hielo)
+             para llegar a la meta (nivel 3 / nivel 5)
+================================================================================
+
+ENUNCIADO
+---------
+Modifica el comportamiento del Técnico en el Nivel 3 para que, al navegar
+hasta la Belkanita con A*, el camino pase obligatoriamente por alguna casilla
+de tipo 'H' (hielo), aunque el camino directo no pase por allí.
+
+ANÁLISIS
+--------
+La solución más limpia es un A* EN DOS FASES:
+  Fase 1: A* desde posición actual hasta la 'H' más cercana (waypoint).
+  Fase 2: A* desde el estado final de la fase 1 hasta la Belkanita.
+
+Clave: usar ApplyTecnico (ya implementado) para simular el estado exacto
+(posición + orientación + zapatillas) al llegar a la casilla H. Así la
+fase 2 parte del estado correcto.
+
+No hay que modificar el A* ni sus estructuras: sólo cambiar qué se le pide.
+
+CÓDIGO — modificar ComportamientoTecnicoNivel_3
+-----------------------------------------------
+Reemplazar el bloque "if (!hayPlan) { ... }" por:
+
+    if (!hayPlan)
+    {
+        // Buscar todas las casillas 'H' conocidas en el mapa
+        vector<pair<int,int>> celdasH;
+        for (int f = 0; f < (int)mapaResultado.size(); f++)
+            for (int c = 0; c < (int)mapaResultado[0].size(); c++)
+                if (mapaResultado[f][c] == 'H')
+                    celdasH.push_back({f, c});
+
+        EstadoT inicio;
+        inicio.site.f    = sensores.posF;
+        inicio.site.c    = sensores.posC;
+        inicio.site.brujula = sensores.rumbo;
+        inicio.zapatillas = tiene_zapatillas;
+
+        EstadoT fin;
+        fin.site.f    = sensores.BelPosF;
+        fin.site.c    = sensores.BelPosC;
+        fin.site.brujula = sensores.rumbo;
+        fin.zapatillas = false;
+
+        list<Action> mejor_plan;
+        int mejor_long = INT_MAX;
+
+        for (auto [hf, hc] : celdasH)
+        {
+            // Waypoint: la H con cualquier orientación de llegada
+            EstadoT waypoint;
+            waypoint.site.f    = hf;
+            waypoint.site.c    = hc;
+            waypoint.site.brujula = sensores.rumbo; // ignorado por EsDestino
+            waypoint.zapatillas   = false;
+
+            // Fase 1: inicio → H
+            list<Action> plan1 = AEstrellaTecnico(inicio, waypoint);
+            if (plan1.empty()) continue;
+
+            // Simular el estado real al llegar a H aplicando cada acción
+            EstadoT estado_en_h = inicio;
+            for (Action a : plan1)
+                estado_en_h = ApplyTecnico(a, estado_en_h);
+
+            // Fase 2: H → Belkanita
+            list<Action> plan2 = AEstrellaTecnico(estado_en_h, fin);
+            if (plan2.empty()) continue;
+
+            int longitud = (int)plan1.size() + (int)plan2.size();
+            if (longitud < mejor_long)
+            {
+                mejor_long = longitud;
+                mejor_plan = plan1;
+                mejor_plan.splice(mejor_plan.end(), plan2);
+            }
+        }
+
+        if (!mejor_plan.empty())
+        {
+            plan = mejor_plan;
+            VisualizaPlan(inicio.site, plan);
+            hayPlan = true;
+        }
+    }
+
+RAZONAMIENTO
+------------
+- ApplyTecnico ya está en la clase → se reutiliza sin escribir código extra.
+- Iterar por todas las H y quedarse con el plan más corto es O(|H| * coste_A*).
+- Si no hay ninguna 'H' accesible, plan queda vacío → IDLE (comportamiento seguro).
+- Para N5: aplicar el mismo patrón en la fase T5_YENDO_OBJETIVO, añadiendo
+  una sub-fase que va primero a H y luego al objetivo. Ver Ejercicio 5.
+
+VARIANTE: cambiar 'H' por 'X', por 'S', por cualquier tipo → sólo cambia
+la condición mapaResultado[f][c] == 'H'.
+
+
+================================================================================
+EJERCICIO 2 — Técnico nivel 3: solo movimiento cardinal (N/S/E/O)
+================================================================================
+
+ENUNCIADO
+---------
+Modifica el comportamiento del Técnico en el Nivel 3 para que al planificar
+con A* únicamente pueda moverse en las 4 direcciones cardinales
+(norte, sur, este, oeste). Los movimientos en diagonal quedan prohibidos.
+
+ANÁLISIS
+--------
+Hay UNA función que controla qué acciones son válidas en A*:
+    EsAccionAplicableTecnico(Action accion, const EstadoT &st)
+
+Si añadimos ahí que WALK sólo es válido cuando la brújula es cardinal,
+el A* automáticamente genera sólo caminos ortogonales. Los giros TURN_SR/SL
+siguen siendo válidos para cambiar de dirección.
+
+CÓDIGO — modificar EsAccionAplicableTecnico
+--------------------------------------------
+Añadir al principio del bloque "if (accion == WALK)":
+
+    bool ComportamientoTecnico::EsAccionAplicableTecnico(
+            Action accion, const EstadoT &st) const
+    {
+        if (accion == TURN_SR || accion == TURN_SL)
+            return true;
+
+        if (accion == WALK)
+        {
+            // *** RESTRICCIÓN: solo movimiento cardinal ***
+            Orientacion br = st.site.brujula;
+            if (br == noreste || br == sureste ||
+                br == suroeste || br == noroeste)
+                return false;   // diagonal prohibida
+
+            EstadoT next = NextCasillaTecnico(st);
+            if (!EsCasillaTransitableTecnico(next.site.f, next.site.c,
+                                             st.zapatillas))
+                return false;
+
+            int diff = abs((int)mapaCotas[next.site.f][next.site.c]
+                         - (int)mapaCotas[st.site.f][st.site.c]);
+            return diff <= 1;
+        }
+
+        return false;
+    }
+
+RAZONAMIENTO
+------------
+- El cambio está SÓLO en EsAccionAplicableTecnico → afecta a N3, N5 y N6
+  simultáneamente sin tocar más código (reutilización garantizada).
+- Los giros siguen siendo libres: el Técnico puede girar hasta quedar en
+  cardinal y entonces avanzar.
+- El camino resultante puede ser más largo que en 8 direcciones, pero
+  el A* seguirá encontrando el óptimo dentro de las restricciones.
+- IMPLICACIÓN para N5: el Técnico también llega al objetivo en cardinal,
+  lo cual es compatible con INSTALL (que requiere adyacencia ortogonal).
+
+
+================================================================================
+EJERCICIO 3 — Técnico nivel 3: solo movimiento diagonal (NE/SE/SO/NO)
+================================================================================
+
+ENUNCIADO
+---------
+Modifica el Técnico nivel 3 para que solo pueda moverse en diagonal.
+Nota: la instalación de tuberías (N5) se vuelve imposible con este
+cambio porque INSTALL requiere adyacencia ortogonal.
+
+ANÁLISIS
+--------
+Mismo patrón que el Ejercicio 2, pero invirtiendo la condición.
+
+CÓDIGO — modificar EsAccionAplicableTecnico
+--------------------------------------------
+        if (accion == WALK)
+        {
+            // *** RESTRICCIÓN: solo movimiento diagonal ***
+            Orientacion br = st.site.brujula;
+            if (br == norte || br == sur ||
+                br == este  || br == oeste)
+                return false;   // cardinal prohibido
+
+            EstadoT next = NextCasillaTecnico(st);
+            if (!EsCasillaTransitableTecnico(next.site.f, next.site.c,
+                                             st.zapatillas))
+                return false;
+
+            int diff = abs((int)mapaCotas[next.site.f][next.site.c]
+                         - (int)mapaCotas[st.site.f][st.site.c]);
+            return diff <= 1;
+        }
+
+RAZONAMIENTO
+------------
+- Misma lógica que el Ejercicio 2, condición opuesta.
+- El examinador indicó que "la instalación es imposible" → no hay que
+  preocuparse de que N5 funcione con este cambio.
+- Si se pide este cambio SOLO para N3 (no para N5), se puede usar una
+  variable de instancia o un parámetro:
+
+    bool solo_diagonal_n3 = false; // activar en el constructor de N3
+
+  Y comprobar 'solo_diagonal_n3' en EsAccionAplicableTecnico.
+  Pero si el enunciado dice "solo para N3", la solución más simple es
+  no llamar a AEstrellaTecnico en N3 sino implementar un A* local
+  o filtrar acciones en el nivel:
+
+  En ComportamientoTecnicoNivel_3, antes de llamar a AEstrellaTecnico:
+    vector<Action> acciones_validas = {TURN_SR, TURN_SL};
+    // solo añadir WALK si la dirección es diagonal
+    Orientacion br = sensores.rumbo;
+    if (br==noreste||br==sureste||br==suroeste||br==noroeste)
+        acciones_validas.push_back(WALK);
+
+  Aunque la solución más limpia es la del flag.
+
+
+================================================================================
+EJERCICIO 4 — Técnico da pasos en turnos impares + tuberías pasan por agua
+================================================================================
+
+ENUNCIADO PARTE A — Técnico da pasos en turnos impares
+---------
+El Técnico sólo puede ejecutar la acción WALK en turnos impares
+(1, 3, 5, …). En los turnos pares debe devolver IDLE aunque tenga plan.
+
+ANÁLISIS PARTE A
+----------------
+Añadir un contador de turno en el estado del Técnico y aplicarlo en la
+EJECUCIÓN del plan (no en la planificación). El A* no cambia.
+
+Añadir en tecnico.hpp (variables privadas):
+    int turno_ejecucion_n3 = 0;  // contador de turnos de ejecución
+
+En ComportamientoTecnicoNivel_3, al ejecutar el plan:
+
+    if (hayPlan && !plan.empty())
+    {
+        turno_ejecucion_n3++;           // contar turno
+        Action accion = plan.front();
+
+        // Solo WALK en turno impar
+        if (accion == WALK && (turno_ejecucion_n3 % 2 == 0))
+            return IDLE;    // esperar un turno, no consumir el plan
+
+        plan.pop_front();
+        return accion;
+    }
+
+RAZONAMIENTO PARTE A
+--------------------
+- El plan A* no cambia: sigue siendo el camino óptimo.
+- Solo la EJECUCIÓN se ralentiza: un WALK cada 2 turnos.
+- Los giros (TURN_SR/SL) se ejecutan siempre, no se ven afectados.
+- turno_ejecucion_n3 debe reiniciarse a 0 cuando se recalcula el plan.
+
+ENUNCIADO PARTE B — Tuberías pasan obligatoriamente por agua
+---------
+Modifica el planificador de tuberías (BuscarPlanNivel4) para que la
+ruta encontrada pase por al menos una casilla de agua ('A').
+
+ANÁLISIS PARTE B
+----------------
+Añadir un campo booleano al nodo BFS que registre si se ha pasado por agua.
+El objetivo ('U') solo se acepta cuando ese flag está a true.
+
+CÓDIGO PARTE B — modificar BuscarPlanNivel4 en ingeniero.cpp
+--------------------------------------------------------------
+En la definición local de Nodo dentro de BuscarPlanNivel4:
+
+    struct Nodo
+    {
+        int f, c;
+        int h;
+        int installs;
+        int impacto;
+        bool ha_pasado_agua;   // *** NUEVO ***
+        list<Paso> plan;
+    };
+
+Al inicializar los nodos raíz (bucle for op0):
+
+    ini.ha_pasado_agua = (mapaResultado[origen.f][origen.c] == 'A');
+
+Al expandir vecinos:
+
+    sig.ha_pasado_agua = cur.ha_pasado_agua ||
+                         (mapaResultado[nf][nc] == 'A');  // *** NUEVO ***
+
+Al comprobar si se llegó a 'U':
+
+    if (mapaResultado[cur.f][cur.c] == 'U' && cur.ha_pasado_agua)  // *** +condición ***
+    {
+        // ... guardar como mejor plan ...
+    }
+
+Ajustar también la clave de dominancia (etiquetas) para incluir ha_pasado_agua:
+    auto key = make_tuple(sig.f, sig.c, sig.h, (int)sig.ha_pasado_agua);
+
+RAZONAMIENTO PARTE B
+--------------------
+- El booleano se propaga automáticamente por el BFS.
+- La restricción "pasar por agua" puede hacer el plan más largo/costoso.
+- Si no hay ninguna ruta válida pasando por agua, la función devuelve vacío.
+- Para "pasar por casilla de sendero 'S'" → idéntico, cambiando 'A' por 'S'.
+
+
+================================================================================
+EJERCICIO 5 — Técnico N5: waypoint en casilla 'X' antes del primer objetivo
+             + tuberías pasan por al menos una casilla sendero ('S')
+================================================================================
+
+ENUNCIADO
+---------
+Parte A: En el nivel 5, antes de ir al primer punto que le indica el
+Ingeniero con COME, el Técnico debe pasar por la casilla 'X' más cercana.
+Parte B: El plan de tuberías debe incluir al menos una casilla de tipo 'S'.
+
+ANÁLISIS PARTE A
+----------------
+En la máquina de estados del Técnico N5, cuando se recibe el primer COME
+(hayObjetivoN5 pasa de false a true), antes de ir al objetivo hay que añadir
+un sub-objetivo intermedio en la X más cercana.
+
+Añadir variable en tecnico.hpp:
+    bool primer_come_n5 = true;  // true hasta que se complete el primer waypoint X
+
+Modificar en ComportamientoTecnicoNivel_5, bloque T5_YENDO_OBJETIVO:
+
+    if (estado_n5 == T5_YENDO_OBJETIVO && hayObjetivoN5)
+    {
+        // *** NUEVO: si es el primer objetivo, ir primero a la X más cercana ***
+        if (primer_come_n5)
+        {
+            // Buscar X más cercana
+            int mejor_dist = INT_MAX;
+            pair<int,int> X_cercana = {-1, -1};
+            for (int f = 0; f < (int)mapaResultado.size(); f++)
+                for (int c = 0; c < (int)mapaResultado[0].size(); c++)
+                    if (mapaResultado[f][c] == 'X')
+                    {
+                        int d = abs(f - sensores.posF) + abs(c - sensores.posC);
+                        if (d < mejor_dist)
+                        {
+                            mejor_dist = d;
+                            X_cercana = {f, c};
+                        }
+                    }
+
+            if (X_cercana.first >= 0 && !MismaCasilla(actual, X_cercana.first, X_cercana.second))
+            {
+                // Ir a X primero: redirigir objetivo temporalmente
+                // Cuando lleguemos a X, desactivar primer_come_n5
+                objetivo_n5.f = X_cercana.first;
+                objetivo_n5.c = X_cercana.second;
+                hayPlan = false;
+                plan.clear();
+                primer_come_n5 = false;   // marcar: ya en camino a X
+                // Caer en el flujo normal de T5_YENDO_OBJETIVO con nuevo objetivo
+            }
+            else
+            {
+                primer_come_n5 = false;   // no hay X o ya estamos en ella
+                // restaurar objetivo original: sensores.GotoF/C (guardar al recibir COME)
+            }
+        }
+
+        // ... resto del flujo normal T5_YENDO_OBJETIVO
+    }
+
+NOTA: Hay que guardar el objetivo original al recibir COME:
+    ubicacion objetivo_real_n5;  // guardar GotoF/GotoC del COME
+    // Al llegar a X, restaurar objetivo_n5 = objetivo_real_n5
+
+ANÁLISIS PARTE B — Tuberías por sendero
+----------------------------------------
+Idéntico al Ejercicio 4 Parte B, cambiando 'A' (agua) por 'S' (sendero):
+
+    bool ha_pasado_sendero = false;  // en el nodo BFS
+    // propagar: sig.ha_pasado_sendero = cur.ha_pasado_sendero || (mapaResultado[nf][nc] == 'S')
+    // aceptar U sólo cuando ha_pasado_sendero == true
+
+
+================================================================================
+EJERCICIO 6 — Nivel 4: tuberías obligatoriamente pasan por al menos una
+             casilla de agua ('A') antes de terminar
+================================================================================
+
+ENUNCIADO
+---------
+Modifica BuscarPlanNivel4 para que la ruta de tuberías encontrada pase
+necesariamente por al menos una casilla de tipo 'A' (agua).
+
+CÓDIGO — Idéntico al Ejercicio 4 Parte B (ver arriba)
+------------------------------------------------------
+Es exactamente el mismo cambio en BuscarPlanNivel4:
+    · Añadir campo 'ha_pasado_agua' al nodo BFS
+    · Propagarlo al expandir vecinos: sig.ha_pasado_agua = cur.ha_pasado_agua || (cas == 'A')
+    · Aceptar 'U' sólo si ha_pasado_agua == true
+    · Añadir ha_pasado_agua a la clave de dominancia (como int 0/1)
+
+RAZONAMIENTO
+------------
+- El agua ('A') tiene un impacto ecológico muy alto (ImpactoInstallCasilla='A'→50).
+  Forzar el paso por agua hace que el plan use más presupuesto ecológico.
+- Si el presupuesto no alcanza para pasar por agua, la función devuelve vacío.
+- En N6 el margen se reduce al 85% del presupuesto total, así que puede haber
+  casos en los que con la restricción de agua no encuentre plan en N6.
+
+
+================================================================================
+EJERCICIO 7 — Agente (Técnico o Ingeniero) solo puede moverse en diagonal
+================================================================================
+
+ENUNCIADO
+---------
+Modifica el comportamiento para que el agente indicado solo pueda dar pasos
+en diagonal (noreste, sureste, suroeste, noroeste).
+
+PARA EL TÉCNICO (afecta A*)
+----------------------------
+Ver Ejercicio 3 — modificar EsAccionAplicableTecnico.
+
+PARA EL INGENIERO (afecta BFS)
+-------------------------------
+La restricción se aplica en applyI (o en B_Anchura_Ingeniero):
+
+    // En applyI, no ejecutar WALK si la dirección es cardinal
+    case WALK:
+        {
+            Orientacion br = st.site.brujula;
+            // *** RESTRICCIÓN DIAGONAL ***
+            if (br == norte || br == sur || br == este || br == oeste)
+                break;  // no mover, devolver estado igual
+
+            if (CasillaAccesibleIngeniero(st, terreno, altura))
+                next = NextCasillaIngeniero(st);
+        }
+        break;
+
+NOTA: En B_Anchura_Ingeniero, el filtro
+    "if (child.estado == current.estado && (a == WALK || a == JUMP)) continue;"
+evita expandir WALK inválido, así que el BFS seguirá correctamente.
+
+PARA MOVIMIENTO REACTIVO (N0, N1, N6)
+---------------------------------------
+Estos niveles no usan BFS/A* para decidir giros. Hay que añadir la misma
+comprobación antes de asignar WALK:
+
+    // En el bloque de decisión reactiva:
+    if (accion == WALK)
+    {
+        Orientacion br = sensores.rumbo;
+        bool es_diagonal = (br==noreste||br==sureste||br==suroeste||br==noroeste);
+        if (!es_diagonal)
+            accion = TURN_SR;  // forzar giro hasta quedar en diagonal
+    }
+
+RAZONAMIENTO
+------------
+- Los giros TURN_SR/SL siguen siendo libres → el agente puede reorientarse.
+- El agente tardará 1-3 giros extra en alinearse antes de poder avanzar.
+- El mapa se puede recorrer en diagonal aunque sea más lento en casillas
+  ortogonales (se necesitan 2 movimientos diagonales donde antes bastaba 1).
+
+
+================================================================================
+EJERCICIO 8 — Nivel 4/5: diseño de tuberías más corto que NO pasa por 'S'
+             + probar en Nivel 5 con agentes modificados
+================================================================================
+
+ENUNCIADO
+---------
+Modifica el algoritmo de búsqueda del Nivel 4 para obtener el diseño de
+tuberías más corto que NO pase por ninguna casilla de tipo 'S' (sendero/arena).
+Probar en el Nivel 5 que los agentes (con la modificación en su forma de
+desplazarse que aquí se indica y las nuevas restricciones sobre la línea de
+tuberías) son capaces de construirla con éxito.
+Completar la misión con éxito independientemente del número de instantes.
+
+ANÁLISIS
+--------
+Hay UNA función que actúa como filtro canónico de casillas del plan de tuberías:
+    CasillaValidaParaTuberia(int f, int c)
+
+Esta función decide si una casilla puede formar parte de la red. Actualmente
+excluye: P, M, ?, B. Añadir 'S' a esa lista es el cambio mínimo y correcto.
+
+Ventaja clave: CasillaValidaParaTuberia es llamada por BuscarPlanNivel4,
+que a su vez es usada por N4, N5 y N6 → el cambio se propaga a todos
+sin tocar más código.
+
+"Más corto": BuscarPlanNivel4 ya minimiza pasos (entre otros criterios)
+mediante la poda de Pareto → no hace falta cambiar el criterio de búsqueda,
+solo restringir el espacio de casillas válidas.
+
+NOTA SOBRE "la modificación en su forma de desplazarse":
+El enunciado puede combinar esta restricción de tuberías con una restricción
+de movimiento del agente (por ejemplo, solo movimiento cardinal). En ese caso
+aplicar TAMBIÉN el cambio de EsAccionAplicableTecnico del Ejercicio 2.
+Si el enunciado no especifica restricción de movimiento, este ejercicio
+requiere únicamente el cambio en CasillaValidaParaTuberia.
+
+CÓDIGO — modificar CasillaValidaParaTuberia en ingeniero.cpp
+------------------------------------------------------------
+Antes (línea ~1481):
+
+    if (casilla == 'P' || casilla == 'M' || casilla == '?' || casilla == 'B')
+        return false;
+
+Después (un cambio de una línea):
+
+    // 'S' añadido: la tubería no puede pasar por sendero/arena
+    if (casilla == 'P' || casilla == 'M' || casilla == '?' || casilla == 'B' ||
+        casilla == 'S')
+        return false;
+
+Eso es todo. No hay que tocar BuscarPlanNivel4, N5 ni N6.
+
+VERIFICACIÓN EN NIVEL 5 — sin cambios adicionales
+--------------------------------------------------
+El Nivel 5 llama a BuscarPlanNivel4 para obtener plan_tuberias_n5.
+Al estar 'S' excluida, el plan generado evita esas casillas automáticamente.
+La ejecución por fases (N5_PLANIFICAR → N5_PREPARAR_TRAMO → … → N5_TERMINADO)
+es exactamente la misma; el Técnico navega con A* hasta los puntos de
+instalación indicados por el Ingeniero, que pueden haber cambiado de posición
+(ahora no pasan por 'S'), pero el A* los alcanza igualmente.
+
+"Independientemente del número de instantes" → no hay límite de turnos.
+No hay que activar ningún modo de optimización de tiempo.
+
+RAZONAMIENTO
+------------
+- Cambio mínimo y de máximo alcance: 1 línea en CasillaValidaParaTuberia
+  afecta a N4, N5 y N6 simultáneamente.
+- La poda de Pareto de BuscarPlanNivel4 sigue siendo válida: el BFS explora
+  solo casillas no-'S' y encuentra el camino más corto dentro de ese subespacio.
+- Si no existe ninguna ruta de la Belkanita al origen evitando 'S',
+  BuscarPlanNivel4 devuelve lista vacía. En ese caso N4 queda sin plan y N5
+  nunca pasa de la fase N5_PLANIFICAR (el agente devuelve IDLE). El examinador
+  garantiza que el mapa tiene solución, así que esto no ocurrirá.
+- COMBINACIÓN con movimiento cardinal (Ej. 2): si además el Técnico solo se
+  mueve en cardinal, aplicar también el cambio en EsAccionAplicableTecnico.
+  Ambas restricciones son independientes y compatibles.
+- 'S' (arena) tiene coste energético 3 en A*, pero como casilla de tubería
+  tiene impacto ecológico 25 (ver ImpactoInstallCasilla). Al excluirla,
+  el impacto total puede subir si la ruta alternativa usa casillas más costosas.
+
+
+================================================================================
+CONSEJOS GENERALES PARA LA DEFENSA
+================================================================================
+
+1. REUTILIZAR FUNCIONES EXISTENTES
+   - ApplyTecnico: simular el estado tras un plan (clave para waypoints)
+   - EsAccionAplicableTecnico: punto único de control para movimiento en A*
+   - BuscarPlanNivel4: añadir un campo booleano al nodo es el patrón universal
+     para "obligar a pasar por un tipo de casilla"
+
+2. PATRÓN WAYPOINT (A* dos fases)
+   Para "el agente debe pasar por casilla tipo X antes de llegar a Y":
+   a. Buscar todas las casillas de tipo X en mapaResultado
+   b. Para cada X: plan1 = A*(inicio→X), simular estado con ApplyTecnico,
+      plan2 = A*(estado_en_X→Y)
+   c. Quedarse con el par (plan1, plan2) de menor longitud total
+   d. plan = plan1 + plan2 (splice o concatenar)
+
+3. PATRÓN RESTRICCIÓN BFS/A* (pasar por tipo de casilla)
+   Para "la ruta planificada debe incluir al menos una casilla de tipo X":
+   a. Añadir campo bool ha_pasado_X al struct Nodo de la búsqueda
+   b. Inicializar: ha_pasado_X = (casilla_origen == 'X')
+   c. Propagar: sig.ha_pasado_X = cur.ha_pasado_X || (casilla_siguiente == 'X')
+   d. Aceptar el objetivo sólo si ha_pasado_X == true
+   e. Incluir ha_pasado_X en la clave del mapa de cerrados/etiquetas
+
+4. RESTRICCIÓN DE DIRECCIÓN
+   - Solo cardinal: en EsAccionAplicableTecnico, si brujula es diagonal → return false
+   - Solo diagonal: si brujula es cardinal → return false
+   - El A* y el BFS se adaptan solos, no hay que tocar nada más.
+
+5. SI PIDEN MODIFICAR N3 Y N5 A LA VEZ
+   - La modificación de EsAccionAplicableTecnico afecta ambos sin tocar más código.
+   - Si la modificación es de EJECUCIÓN (ej: pasos impares), añadir la lógica
+     tanto en Nivel_3 como en Nivel_5.
+
+6. ENERGÍA MÍNIMA SEGURA
+   - El Técnico hace IDLE si energia <= 12 (nivel 0). Asegurarse de que cualquier
+     cambio no elimine esta comprobación para evitar muerte por agotamiento.
+
+================================================================================
+FIN DEL DOCUMENTO
+================================================================================
