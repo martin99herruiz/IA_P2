@@ -18,6 +18,41 @@ En esta entrega:
     que llamen a AEstrellaTecnico.
 
 ================================================================================
+ÍNDICE DE EJERCICIOS
+================================================================================
+
+ #  | Nivel | Agente    | Enunciado resumido
+----|-------|-----------|-------------------------------------------------------
+ 1  |  N3   | Técnico   | Ruta obligatoria por al menos una casilla 'H' (hielo)
+ 2  |  N3   | Técnico   | Solo movimiento cardinal (N/S/E/O)
+ 3  |  N3   | Técnico   | Solo movimiento diagonal (NE/SE/SO/NO)
+ 4  |  N3   | Técnico   | WALK solo en turnos impares
+    |  N4   | Ingeniero | Tuberías pasan obligatoriamente por al menos una 'A'
+ 5  |  N5   | Técnico   | Waypoint en casilla 'X' antes del primer objetivo
+    |  N4   | Ingeniero | Tuberías pasan por al menos una casilla 'S'
+ 6  |  N4   | Ingeniero | Tuberías pasan obligatoriamente por al menos una 'A'
+ 7  | N0-N6 | Cualquiera| Solo movimiento diagonal (NE/SE/SO/NO)
+ 8  |  N4/5 | Ingeniero | Diseño de tuberías más corto SIN pasar por 'S'
+ 9  |  N3   | Técnico   | Ruta sin casillas de cota (altura) mayor a 3
+10  |  N3   | Técnico   | Recorrido por tiempo mínimo (no por energía mínima)
+11  |  N2   | Ingeniero | Ingeniero Ortogonal: solo movimiento cardinal (N/S/E/O)
+12  |  N2   | Ingeniero | [PARTE 1] Supersticioso: JUMPs en grupos de longitud impar
+    |  N4/5 | Ingeniero | [PARTE 2] Diseño en Hierba: tuberías pasan por al menos una 'H'
+
+================================================================================
+FUNCIÓN CLAVE POR TIPO DE MODIFICACIÓN
+================================================================================
+
+  Restricción de MOVIMIENTO en A* (Técnico)  →  EsAccionAplicableTecnico
+  Restricción de MOVIMIENTO en BFS (Ingeniero) →  applyI  (+ flag solo_cardinal_i)
+  Cambio de COSTE en A* (Técnico)             →  CosteEnergiaTecnico
+  Waypoint obligatorio en navegación          →  A* dos fases con ApplyTecnico
+  Restricción de CASILLA en tuberías (excluir) →  CasillaValidaParaTuberia
+  Restricción de CASILLA en tuberías (incluir) →  campo bool en nodo de BuscarPlanNivel4
+  Restricción sobre COTA absoluta             →  EsAccionAplicableTecnico / applyI
+  Restricción compleja sobre SECUENCIA        →  nuevo BFS con estado ampliado (jc)
+
+================================================================================
 EJERCICIO 1 — Técnico obligado a pasar por al menos una casilla 'H' (hielo)
              para llegar a la meta (nivel 3 / nivel 5)
 ================================================================================
@@ -28,7 +63,8 @@ Modifica el comportamiento del Técnico en el Nivel 3 para que, al navegar
 hasta la Belkanita con A*, el camino pase obligatoriamente por alguna casilla
 de tipo 'H' (hielo), aunque el camino directo no pase por allí.
 
-ANÁLISIS
+ANÁLISIS {
+
 --------
 La solución más limpia es un A* EN DOS FASES:
   Fase 1: A* desde posición actual hasta la 'H' más cercana (waypoint).
@@ -117,7 +153,7 @@ RAZONAMIENTO
 
 VARIANTE: cambiar 'H' por 'X', por 'S', por cualquier tipo → sólo cambia
 la condición mapaResultado[f][c] == 'H'.
-
+}
 
 ================================================================================
 EJERCICIO 2 — Técnico nivel 3: solo movimiento cardinal (N/S/E/O)
@@ -129,7 +165,7 @@ Modifica el comportamiento del Técnico en el Nivel 3 para que al planificar
 con A* únicamente pueda moverse en las 4 direcciones cardinales
 (norte, sur, este, oeste). Los movimientos en diagonal quedan prohibidos.
 
-ANÁLISIS
+ANÁLISIS {
 --------
 Hay UNA función que controla qué acciones son válidas en A*:
     EsAccionAplicableTecnico(Action accion, const EstadoT &st)
@@ -179,7 +215,7 @@ RAZONAMIENTO
   el A* seguirá encontrando el óptimo dentro de las restricciones.
 - IMPLICACIÓN para N5: el Técnico también llega al objetivo en cardinal,
   lo cual es compatible con INSTALL (que requiere adyacencia ortogonal).
-
+}
 
 ================================================================================
 EJERCICIO 3 — Técnico nivel 3: solo movimiento diagonal (NE/SE/SO/NO)
@@ -191,7 +227,7 @@ Modifica el Técnico nivel 3 para que solo pueda moverse en diagonal.
 Nota: la instalación de tuberías (N5) se vuelve imposible con este
 cambio porque INSTALL requiere adyacencia ortogonal.
 
-ANÁLISIS
+ANÁLISIS {
 --------
 Mismo patrón que el Ejercicio 2, pero invirtiendo la condición.
 
@@ -239,6 +275,7 @@ RAZONAMIENTO
 
   Aunque la solución más limpia es la del flag.
 
+}
 
 ================================================================================
 EJERCICIO 4 — Técnico da pasos en turnos impares + tuberías pasan por agua
@@ -249,7 +286,7 @@ ENUNCIADO PARTE A — Técnico da pasos en turnos impares
 El Técnico sólo puede ejecutar la acción WALK en turnos impares
 (1, 3, 5, …). En los turnos pares debe devolver IDLE aunque tenga plan.
 
-ANÁLISIS PARTE A
+ANÁLISIS PARTE A {
 ----------------
 Añadir un contador de turno en el estado del Técnico y aplicarlo en la
 EJECUCIÓN del plan (no en la planificación). El A* no cambia.
@@ -278,13 +315,14 @@ RAZONAMIENTO PARTE A
 - Solo la EJECUCIÓN se ralentiza: un WALK cada 2 turnos.
 - Los giros (TURN_SR/SL) se ejecutan siempre, no se ven afectados.
 - turno_ejecucion_n3 debe reiniciarse a 0 cuando se recalcula el plan.
+}
 
 ENUNCIADO PARTE B — Tuberías pasan obligatoriamente por agua
 ---------
 Modifica el planificador de tuberías (BuscarPlanNivel4) para que la
 ruta encontrada pase por al menos una casilla de agua ('A').
 
-ANÁLISIS PARTE B
+ANÁLISIS PARTE B {
 ----------------
 Añadir un campo booleano al nodo BFS que registre si se ha pasado por agua.
 El objetivo ('U') solo se acepta cuando ese flag está a true.
@@ -328,7 +366,7 @@ RAZONAMIENTO PARTE B
 - La restricción "pasar por agua" puede hacer el plan más largo/costoso.
 - Si no hay ninguna ruta válida pasando por agua, la función devuelve vacío.
 - Para "pasar por casilla de sendero 'S'" → idéntico, cambiando 'A' por 'S'.
-
+}
 
 ================================================================================
 EJERCICIO 5 — Técnico N5: waypoint en casilla 'X' antes del primer objetivo
@@ -573,6 +611,411 @@ RAZONAMIENTO
 
 
 ================================================================================
+EJERCICIO 9 — Técnico nivel 3: ruta sin casillas de altura mayor a 3
+================================================================================
+
+ENUNCIADO
+---------
+Modifica el comportamiento del Técnico en el Nivel 3 para que, al planificar
+con A*, la ruta no pase nunca por una casilla cuya cota (altura) sea mayor a 3.
+
+ANÁLISIS
+--------
+La restricción es sobre la cota ABSOLUTA de la casilla de destino, no sobre
+la diferencia de altura (que ya se limita a ±1 de forma normal).
+La función correcta donde añadir este filtro es EsAccionAplicableTecnico,
+exactamente donde ya se valida la diferencia de cota. Añadir la comprobación
+antes de la verificación de diff garantiza que el A* nunca expanda hacia
+casillas con cota > 3.
+
+CÓDIGO — modificar EsAccionAplicableTecnico
+--------------------------------------------
+En el bloque "if (accion == WALK)", tras llamar a NextCasillaTecnico:
+
+    if (accion == WALK)
+    {
+        EstadoT next = NextCasillaTecnico(st);
+        if (!EsCasillaTransitableTecnico(next.site.f, next.site.c,
+                                         st.zapatillas))
+            return false;
+
+        // *** NUEVO: no entrar en casillas con cota > 3 ***
+        if ((int)mapaCotas[next.site.f][next.site.c] > 3)
+            return false;
+
+        int diff = abs((int)mapaCotas[next.site.f][next.site.c]
+                     - (int)mapaCotas[st.site.f][st.site.c]);
+        return diff <= 1;
+    }
+
+RAZONAMIENTO
+------------
+- Es UNA línea nueva en EsAccionAplicableTecnico → afecta a N3, N5 y N6.
+- La restricción es sobre la cota DESTINO, no la cota actual. Si el Técnico
+  empieza en cota 4 (p.ej. al inicio del mapa), puede salir hacia una casilla
+  de cota 3 (diff=1 ≤ 1, destino=3 ≤ 3): ambas condiciones se cumplen.
+- Si no existe ruta que evite todas las cotas > 3, AEstrellaTecnico devuelve
+  lista vacía → el Técnico devuelve IDLE. El mapa del examen tendrá solución.
+- VARIANTE: "cota menor que X" → cambiar el umbral 3 por el valor indicado.
+- VARIANTE: "cota mayor que 5 para optimizar energía" → >5 en vez de >3.
+
+
+================================================================================
+EJERCICIO 10 — Técnico nivel 3: mínimo tiempo (en vez de mínima energía)
+================================================================================
+
+ENUNCIADO
+---------
+Modifica el comportamiento del Técnico en el Nivel 3 para que, en lugar de
+minimizar la energía consumida, minimice el número de instantes de simulación
+(número total de acciones: WALK + giros).
+
+ANÁLISIS
+--------
+El algoritmo A* ya implementado minimiza el coste acumulado g (suma de
+CosteEnergiaTecnico). Para pasar a tiempo mínimo basta hacer que cada acción
+cueste exactamente 1 instante, sin importar el tipo de terreno ni si es giro
+o avance. La heurística de Chebyshev sigue siendo admisible y consistente.
+
+Por qué la heurística sigue siendo admisible con coste uniforme 1:
+  - Para llegar de (f1,c1) a (f2,c2) se necesitan al menos max(|df|,|dc|)
+    acciones WALK (cota de Chebyshev).
+  - Los giros añaden acciones adicionales, nunca reducen el total.
+  - Luego h(n) = max(|df|,|dc|) ≤ coste real → admisible.
+  - Consistencia: un WALK cuesta 1 y h decrece como mucho 1 → h(n) ≤ 1+h(n').
+    Un giro cuesta 1 y h no cambia (misma celda) → h(n) ≤ 1+h(n). OK.
+
+CÓDIGO — modificar CosteEnergiaTecnico
+---------------------------------------
+Reemplazar el cuerpo completo de la función por:
+
+    int ComportamientoTecnico::CosteEnergiaTecnico(
+            Action accion, const EstadoT &st) const
+    {
+        (void)accion; (void)st;
+        return 1;   // cada acción (WALK o giro) cuesta 1 instante
+    }
+
+Eso es todo. No hay que cambiar AEstrellaTecnico ni HeuristicaTecnico.
+
+RAZONAMIENTO
+------------
+- Con coste 1 para todo, A* se convierte en BFS uniforme: minimiza acciones.
+- Los giros ya no son "gratuitos" → el A* generará caminos con menos giros
+  innecesarios (más directos).
+- La heurística max(|df|,|dc|) ya no sobreestima para ningún terreno.
+- NOTA IMPORTANTE: con energía mínima, el Técnico evitaba agua (coste 60).
+  Con tiempo mínimo, puede atravesar agua libremente si es el camino más corto.
+  El Técnico puede morir si le queda poca energía y el nuevo plan pasa por agua.
+  Si el examinador pide preservar también la seguridad energética, añadir la
+  comprobación "if (energia <= umbral) return IDLE" al inicio del nivel.
+- VARIANTE COMBINADA: "mínimo tiempo pero sin pasar por agua":
+  Añadir en EsAccionAplicableTecnico, en el bloque WALK:
+    if (mapaResultado[next.site.f][next.site.c] == 'A') return false;
+
+
+================================================================================
+EJERCICIO 11 — Ingeniero Ortogonal: nivel 2, solo movimiento cardinal (N/S/E/O)
+================================================================================
+
+ENUNCIADO
+---------
+El Ingeniero solo puede desplazarse en direcciones ortogonales (Norte, Sur,
+Este y Oeste) y nunca en diagonal. Modifica el algoritmo del nivel 2 para que
+el Ingeniero encuentre el óptimo en instantes de simulación respetando esta
+restricción.
+
+ANÁLISIS
+--------
+El BFS del Ingeniero (B_Anchura_Ingeniero) genera acciones via applyI.
+Para prohibir el movimiento diagonal hay que hacer que applyI no produzca
+desplazamiento cuando la brújula es diagonal. La restricción solo debe
+afectar al Nivel 2 (no al Nivel 5 que también usa B_Anchura_Ingeniero).
+
+Solución limpia: añadir una variable de instancia bool que activa la
+restricción antes de llamar a B_Anchura_Ingeniero en N2 y la desactiva al
+terminar. La función applyI (const) puede leer variables de instancia sin
+problema.
+
+CÓDIGO — paso 1: añadir variable en ingeniero.hpp (sección privada)
+---------------------------------------------------------------------
+    bool solo_cardinal_i = false;   // restricción cardinal para applyI
+
+CÓDIGO — paso 2: modificar applyI en ingeniero.cpp
+----------------------------------------------------
+En los casos WALK y JUMP, añadir al principio del bloque:
+
+    case WALK:
+    {
+        // *** RESTRICCIÓN CARDINAL (activa cuando solo_cardinal_i == true) ***
+        if (solo_cardinal_i)
+        {
+            Orientacion br = st.site.brujula;
+            if (br == noreste || br == sureste ||
+                br == suroeste || br == noroeste)
+                break;   // no avanzar en diagonal → devolver estado sin cambio
+        }
+        if (CasillaAccesibleIngeniero(st, terreno, altura))
+            next = NextCasillaIngeniero(st);
+    }
+    break;
+
+    case JUMP:
+    {
+        // *** RESTRICCIÓN CARDINAL (misma lógica) ***
+        if (solo_cardinal_i)
+        {
+            Orientacion br = st.site.brujula;
+            if (br == noreste || br == sureste ||
+                br == suroeste || br == noroeste)
+                break;
+        }
+        if (CasillaAccesibleJumpIngeniero(st, terreno, altura))
+            next = NextCasillaIngeniero2(st);
+    }
+    break;
+
+CÓDIGO — paso 3: activar la restricción en ComportamientoIngenieroNivel_2
+--------------------------------------------------------------------------
+En el bloque "if (!hayPlan) { ... }" de Nivel_2, envolver la llamada a BFS:
+
+    solo_cardinal_i = true;                           // activar restricción
+    plan = B_Anchura_Ingeniero(inicio, fin);
+    solo_cardinal_i = false;                          // restaurar para N5
+
+RAZONAMIENTO
+------------
+- El BFS sigue siendo BFS (coste uniforme = mínimo de pasos = mínimo de
+  instantes), así que el "óptimo en instantes" se mantiene.
+- applyI devuelve el MISMO estado si la dirección es diagonal con la
+  restricción activa. B_Anchura_Ingeniero ya filtra estados hijos iguales
+  al padre para WALK/JUMP (línea "if (child == current && WALK/JUMP) continue"),
+  así que la expansión de diagonales se descarta automáticamente.
+- El flag solo_cardinal_i se restaura a false después de N2 → N5 sigue
+  usando movimiento en 8 direcciones sin cambios.
+- JUMP también se restringe porque "desplazarse" incluye el salto de 2 celdas.
+
+
+================================================================================
+EJERCICIO 12 — Combinado (mismo examen):
+  PARTE 1: Ingeniero supersticioso — JUMP en grupos de longitud impar
+  PARTE 2: Diseño en Hierba — tuberías pasan por al menos una casilla 'H'
+================================================================================
+
+Comando Test PARTE 1:
+./practica2 -m ./mapas/2ez.map -n 2 -i 7 5 5 -t 17 11 4 -seed 0 -Tiempo 3000 -Ambiental 1370 -Energia 5859 -O 15 7
+Rendimiento Esperado PARTE 1: 21
+
+Comando Test PARTE 2:
+./practica2 -m ./mapas/gemini2.map -n 5 -i 10 21 1 -t 20 4 2 -seed 0 -Tiempo 3000 -Ambiental 3000 -Energia 3000 -O 19 26
+Rendimiento Esperado PARTE 2: completar con éxito (sin límite de instantes)
+
+-----------------------------------------------------------------------
+PARTE 1: Ingeniero supersticioso
+-----------------------------------------------------------------------
+
+ENUNCIADO
+---------
+El Ingeniero en sus planes obligatoriamente debe usar un número impar de
+acciones JUMP consecutivas. Modifica el algoritmo de búsqueda del Nivel 2
+para reflejar este cambio. El Ingeniero debe llegar en el menor número de
+instantes posible.
+
+ANÁLISIS
+--------
+Restricción: cada "racha" de JUMPs consecutivos en el plan debe tener
+longitud impar (1, 3, 5, …). No puede haber 0, 2, 4, … JUMPs seguidos.
+
+Para que el BFS respete esta restricción, hay que ampliar el estado con un
+campo que indique en qué situación está la racha de JUMPs actual:
+  jc = 0  → libre (no hay racha activa)
+  jc = 1  → racha de longitud impar (puede terminar o continuar con JUMP)
+  jc = 2  → racha de longitud par  (DEBE continuar con JUMP; no puede terminar)
+
+Transiciones:
+  Estado jc=0: JUMP → jc=1,  WALK/TURN → jc=0
+  Estado jc=1: JUMP → jc=2,  WALK/TURN → jc=0  (permitido: racha impar completa)
+  Estado jc=2: JUMP → jc=1,  WALK/TURN → PROHIBIDO (racha par incompleta)
+
+El destino se acepta solo cuando jc ∈ {0, 1} (no estamos en racha par).
+
+La clave de "explorados" es (EstadoI, jc) para distinguir llegar a la misma
+celda con rachas distintas.
+
+El BFS con este estado ampliado sigue siendo BFS (coste uniforme) → el plan
+encontrado es óptimo en instantes de simulación.
+
+CÓDIGO — escribir nueva función en ingeniero.cpp (antes de Nivel_2)
+--------------------------------------------------------------------
+Añadir también la declaración en ingeniero.hpp:
+    list<Action> B_Anchura_Supersticioso(const EstadoI &ini, const EstadoI &fin);
+
+Implementación (añadir en ingeniero.cpp):
+
+    list<Action> ComportamientoIngeniero::B_Anchura_Supersticioso(
+            const EstadoI &inicio, const EstadoI &fin)
+    {
+        struct Nodo {
+            EstadoI estado;
+            list<Action> secuencia;
+            int jc;   // 0=libre, 1=racha-impar(puede parar), 2=racha-par(debe continuar)
+        };
+
+        // Explorados: (EstadoI, jc) para distinguir rachas distintas
+        set<pair<EstadoI,int>> explored;
+        queue<Nodo> fifo;
+
+        Nodo ini_nodo;
+        ini_nodo.estado = inicio;
+        ini_nodo.jc = 0;
+        fifo.push(ini_nodo);
+
+        while (!fifo.empty())
+        {
+            Nodo cur = fifo.front(); fifo.pop();
+
+            auto key = make_pair(cur.estado, cur.jc);
+            if (explored.count(key)) continue;
+            explored.insert(key);
+
+            // Aceptar si llegamos al destino y la racha actual NO está en par
+            if (cur.estado.site.f == fin.site.f &&
+                cur.estado.site.c == fin.site.c &&
+                cur.jc != 2)
+                return cur.secuencia;
+
+            for (Action a : {WALK, JUMP, TURN_SR, TURN_SL})
+            {
+                // Si jc==2 (racha par en curso) solo se puede hacer JUMP
+                if (cur.jc == 2 && a != JUMP) continue;
+
+                unsigned char ter = mapaResultado[cur.estado.site.f][cur.estado.site.c];
+                unsigned char cot = mapaCotas[cur.estado.site.f][cur.estado.site.c];
+                EstadoI next_est = applyI(a, cur.estado, ter, cot);
+
+                // Descartar WALK/JUMP que no mueven (obstáculo o borde)
+                if ((a == WALK || a == JUMP) &&
+                    next_est.site.f == cur.estado.site.f &&
+                    next_est.site.c == cur.estado.site.c) continue;
+
+                // Calcular nuevo jc
+                int next_jc;
+                if (a == JUMP)
+                    next_jc = (cur.jc == 0) ? 1 : (cur.jc == 1 ? 2 : 1);
+                    // 0→1 (inicio racha), 1→2 (racha se vuelve par), 2→1 (par→impar)
+                else
+                    next_jc = 0;  // WALK o TURN: resetear racha
+
+                auto next_key = make_pair(next_est, next_jc);
+                if (!explored.count(next_key))
+                {
+                    Nodo child;
+                    child.estado = next_est;
+                    child.secuencia = cur.secuencia;
+                    child.secuencia.push_back(a);
+                    child.jc = next_jc;
+                    fifo.push(child);
+                }
+            }
+        }
+        return {};  // sin solución
+    }
+
+CÓDIGO — modificar ComportamientoIngenieroNivel_2
+--------------------------------------------------
+En el bloque "if (!hayPlan) { ... }":
+
+    // Reemplazar:
+    plan = B_Anchura_Ingeniero(inicio, fin);
+    // Por:
+    plan = B_Anchura_Supersticioso(inicio, fin);
+
+El resto de N2 (ejecución del plan, visualización) no cambia.
+
+RAZONAMIENTO
+------------
+- Se escribe una función nueva → N5 y N6 no se ven afectados.
+- El BFS es FIFO (coste uniforme) → el primer plan encontrado es óptimo
+  en número de acciones (instantes de simulación).
+- El estado ampliado a (EstadoI, jc) con jc ∈ {0,1,2} triplica el espacio
+  de estados en el peor caso: sigue siendo finito y terminable.
+- Si el mapa no tiene ninguna casilla alcanzable con JUMP, el plan resultante
+  solo usa WALK y TURN con jc=0 siempre → la restricción no afecta.
+- Si el plan óptimo sin la restricción usaba un número par de JUMPs
+  consecutivos, el plan nuevo tendrá que añadir un JUMP extra o romper la
+  racha con un WALK, resultando en ≥ 1 acción adicional.
+- NOTA: EstadoI necesita operator< para usarse en set<pair<EstadoI,int>>.
+  Si no está definido en tu entrega, usar un map<tuple<int,int,int,bool,int>,
+  bool> como visited, o añadir operator< a EstadoI.
+
+-----------------------------------------------------------------------
+PARTE 2: Diseño en Hierba
+-----------------------------------------------------------------------
+
+ENUNCIADO
+---------
+Modifica el algoritmo de búsqueda del Nivel 4 para obtener el diseño de
+tuberías más corto que incluya al menos una casilla de tipo 'H' (hierba/hielo).
+Probar en Nivel 5 que los agentes construyen la tubería con éxito.
+
+ANÁLISIS
+--------
+Misma técnica que Ejercicio 4 Parte B (tuberías por agua) y Ejercicio 6,
+cambiando el tipo objetivo de 'A' a 'H'. El campo booleano se añade al nodo
+BFS de BuscarPlanNivel4.
+
+CÓDIGO — modificar BuscarPlanNivel4 en ingeniero.cpp
+----------------------------------------------------
+1. En el struct local Nodo dentro de BuscarPlanNivel4, añadir:
+
+        bool ha_pasado_H = false;   // *** NUEVO ***
+
+2. Al inicializar los nodos raíz (bucle for op0):
+
+        ini.ha_pasado_H = (mapaResultado[origen.f][origen.c] == 'H');
+
+3. Al expandir vecinos, propagar:
+
+        sig.ha_pasado_H = cur.ha_pasado_H ||
+                          (mapaResultado[nf][nc] == 'H');   // *** NUEVO ***
+
+4. Al comprobar si se llegó a 'U':
+
+        if (mapaResultado[cur.f][cur.c] == 'U' && cur.ha_pasado_H)  // *** condición añadida ***
+        {
+            // ... guardar como mejor plan si es mejor que el actual
+        }
+
+5. Incluir ha_pasado_H en la clave de dominancia de Pareto:
+
+        auto key = make_tuple(sig.f, sig.c, sig.h,
+                              sig.installs, sig.impacto,
+                              (int)sig.ha_pasado_H);   // *** NUEVO campo ***
+
+VERIFICACIÓN EN NIVEL 5 — sin cambios adicionales
+--------------------------------------------------
+Exactamente igual que en Ejercicio 8: BuscarPlanNivel4 es llamado por N5
+automáticamente. El plan generado incluye al menos una 'H'. La ejecución
+de N5 (fases de movimiento, COME, INSTALL) no cambia.
+
+RAZONAMIENTO
+------------
+- Patrón booleano universal: igual que Ej 4 Parte B (agua) y Ej 6.
+  Solo cambia 'A' → 'H' en la condición de propagación y en la meta.
+- 'H' (hierba/hielo en nuestro mapa) tiene ImpactoInstallCasilla = 45.
+  Forzar el paso por H puede aumentar el coste ecológico. Con Ambiental=3000
+  hay suficiente margen para el test proporcionado.
+- La clave de Pareto con ha_pasado_H (int 0/1) distingue alcanzar la misma
+  casilla con y sin haber pasado por H, permitiendo que el BFS explore ambas
+  posibilidades y elija la mejor.
+- Si no hay ruta que pase por 'H', BuscarPlanNivel4 devuelve vacío → N5 queda
+  en fase N5_PLANIFICAR indefinidamente (devuelve IDLE). El mapa del examen
+  tiene solución.
+- VARIANTE directa: para 'S' (ver Ej 8 PARTE 2 en mismo examen si se combina)
+  cambiar 'H' → 'S' en toda la lógica.
+
+
+================================================================================
 CONSEJOS GENERALES PARA LA DEFENSA
 ================================================================================
 
@@ -611,6 +1054,25 @@ CONSEJOS GENERALES PARA LA DEFENSA
 6. ENERGÍA MÍNIMA SEGURA
    - El Técnico hace IDLE si energia <= 12 (nivel 0). Asegurarse de que cualquier
      cambio no elimine esta comprobación para evitar muerte por agotamiento.
+
+7. RESTRICCIÓN DE COTA ABSOLUTA (altura máxima/mínima en la ruta)
+   Para "la ruta no puede pasar por casillas con cota > N":
+   - En EsAccionAplicableTecnico (Técnico): añadir tras NextCasillaTecnico:
+       if ((int)mapaCotas[next.site.f][next.site.c] > N) return false;
+   - En applyI (Ingeniero): añadir en WALK/JUMP antes de NextCasillaIngeniero:
+       if ((int)mapaCotas[next.f][next.c] > N) return false;   // tras calcular next
+   - La restricción es sobre la cota DESTINO, no la diferencia.
+
+8. PATRÓN ESTADO AMPLIADO EN BFS (restricción compleja sobre la secuencia)
+   Para restricciones que dependen de la HISTORIA de acciones (p.ej., "JUMPs
+   en grupos impares", "número de giros par"), extender el estado con un campo
+   entero/bool que capture la parte relevante de la historia:
+   a. Definir un struct Nodo local con {EstadoI/EstadoT estado, int extra}
+   b. El set de explorados es set<pair<Estado, int>>
+   c. Las transiciones de 'extra' se calculan al generar hijos
+   d. Las restricciones se aplican filtrando qué acciones son válidas en cada estado
+   e. El destino se acepta solo si 'extra' está en un valor válido de terminación
+   Ver Ejercicio 12 (supersticioso) como ejemplo completo.
 
 ================================================================================
 FIN DEL DOCUMENTO

@@ -249,6 +249,15 @@ private:
                                         const std::vector<std::vector<unsigned char>> &altura,
                                         int max_expansiones = -1);
 
+  // PARTE 1 EXAMEN: BFS con restricción de JUMPs en grupos de longitud impar.
+  // Estado ampliado (EstadoI, jc): jc=0 libre, jc=1 racha impar (puede parar),
+  // jc=2 racha par (debe continuar con JUMP).
+  std::list<Action> B_Anchura_Supersticioso(const EstadoI &inicio,
+                                            const ubicacion &destino,
+                                            const std::vector<std::vector<unsigned char>> &terreno,
+                                            const std::vector<std::vector<unsigned char>> &altura,
+                                            int max_expansiones = -1);
+
   // =========================================================================
   // FUNCIONES AUXILIARES DE BÚSQUEDA NIVEL 4
   // =========================================================================

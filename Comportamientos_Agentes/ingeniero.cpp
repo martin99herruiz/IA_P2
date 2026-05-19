@@ -1244,6 +1244,104 @@ list<Action> ComportamientoIngeniero::B_Anchura_Ingeniero(const EstadoI &inicio,
   return path;
 }
 
+// =============================================================================
+// B_Anchura_Supersticioso — BFS con JUMPs en grupos de longitud impar
+// Estado ampliado: (EstadoI, jc) donde jc ∈ {0,1,2}
+//   jc=0  libre: ninguna racha activa, cualquier acción válida
+//   jc=1  racha impar en curso: puede terminar (WALK/TURN) o continuar (JUMP)
+//   jc=2  racha par en curso:  DEBE continuar con JUMP; WALK/TURN prohibidos
+// Transiciones: 0→JUMP→1, 1→JUMP→2, 2→JUMP→1 (alterna impar/par)
+//               {0,1}→WALK/TURN→0,  2→WALK/TURN→PROHIBIDO
+// Se acepta el destino solo cuando jc ∈ {0,1}.
+// =============================================================================
+list<Action> ComportamientoIngeniero::B_Anchura_Supersticioso(
+    const EstadoI &inicio, const ubicacion &destino,
+    const vector<vector<unsigned char>> &terreno,
+    const vector<vector<unsigned char>> &altura,
+    int max_expansiones)
+{
+  // Nodo local con campo extra jc
+  struct NodoS
+  {
+    EstadoI estado;
+    list<Action> secuencia;
+    int jc;
+
+    bool operator<(const NodoS &o) const
+    {
+      if (estado < o.estado) return true;
+      if (o.estado < estado) return false;
+      return jc < o.jc;
+    }
+    bool operator==(const NodoS &o) const
+    {
+      return estado == o.estado && jc == o.jc;
+    }
+  };
+
+  set<NodoS> explored;
+  set<pair<EstadoI, int>> en_frontera;
+  list<NodoS> frontier;
+  int expansiones = 0;
+
+  NodoS ini;
+  ini.estado = inicio;
+  ini.jc = 0;
+  frontier.push_back(ini);
+  en_frontera.insert({inicio, 0});
+
+  while (!frontier.empty() && (max_expansiones <= 0 || expansiones < max_expansiones))
+  {
+    NodoS cur = frontier.front();
+    frontier.pop_front();
+    en_frontera.erase({cur.estado, cur.jc});
+    expansiones++;
+
+    if (explored.count(cur)) continue;
+    explored.insert(cur);
+
+    // Aceptar destino solo si no estamos en racha de longitud par
+    if (cur.estado.site.f == destino.f &&
+        cur.estado.site.c == destino.c &&
+        cur.jc != 2)
+      return cur.secuencia;
+
+    const Action acciones[4] = {WALK, JUMP, TURN_SR, TURN_SL};
+    for (Action a : acciones)
+    {
+      // jc==2: racha par en curso → solo JUMP permitido
+      if (cur.jc == 2 && a != JUMP) continue;
+
+      EstadoI next_est = applyI(a, cur.estado, terreno, altura);
+
+      // Descartar WALK/JUMP que no producen desplazamiento (obstáculo/borde)
+      if ((a == WALK || a == JUMP) &&
+          next_est.site.f == cur.estado.site.f &&
+          next_est.site.c == cur.estado.site.c) continue;
+
+      // Calcular nuevo jc
+      int next_jc;
+      if (a == JUMP)
+        next_jc = (cur.jc == 0) ? 1 : (cur.jc == 1 ? 2 : 1);
+      else
+        next_jc = 0;  // WALK o TURN: fin/reset de racha
+
+      NodoS child;
+      child.estado = next_est;
+      child.jc = next_jc;
+
+      if (!explored.count(child) && !en_frontera.count({next_est, next_jc}))
+      {
+        child.secuencia = cur.secuencia;
+        child.secuencia.push_back(a);
+        frontier.push_back(child);
+        en_frontera.insert({next_est, next_jc});
+      }
+    }
+  }
+  return {};
+}
+
 // Niveles avanzados (Uso de búsqueda)
 /**
  * @brief Comportamiento del ingeniero para el Nivel 2 (búsqueda).
@@ -1282,7 +1380,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_2(Sensores sensores
     destino.f = sensores.BelPosF;
     destino.c = sensores.BelPosC;
 
-    plan = B_Anchura_Ingeniero(inicio, destino, mapaResultado, mapaCotas);
+    plan = B_Anchura_Supersticioso(inicio, destino, mapaResultado, mapaCotas);
     VisualizaPlan(inicio.site, plan);
     hayPlan = !plan.empty();
   }
@@ -1645,12 +1743,13 @@ list<ComportamientoIngeniero::Paso> ComportamientoIngeniero::BuscarPlanNivel4(co
     int h;        // altura efectiva de esta casilla en el plan (tras op)
     int installs; // número de tramos instalados hasta aquí
     int impacto;  // impacto ecológico acumulado
+    bool ha_pasado_H = false;  // ha pasado por al menos una casilla 'H'
     list<Paso> plan;
   };
 
   queue<Nodo> abiertos; // BFS: FIFO garantiza exploración por número de tramos
   // etiquetas[(f,c,h)] → lista de (installs,impacto) ya explorados con dominancia Pareto
-  map<tuple<int, int, int>, vector<pair<int, int>>> etiquetas;
+  map<tuple<int, int, int, int>, vector<pair<int, int>>> etiquetas;
   int mejor_installs_u = INT_MAX;
   int mejor_impacto_u = INT_MAX;
   list<Paso> mejor_plan_u;
@@ -1673,13 +1772,14 @@ list<ComportamientoIngeniero::Paso> ComportamientoIngeniero::BuscarPlanNivel4(co
     ini.h = hOrigen;
     ini.installs = 0;
     ini.impacto = ImpactoOperacionCasilla(origen.f, origen.c, op0);
+    ini.ha_pasado_H = (mapaResultado[origen.f][origen.c] == 'H');
     ini.plan.push_back({origen.f, origen.c, op0});
 
     if (ini.impacto > maxImpacto)
       continue;
 
     abiertos.push(ini);
-    etiquetas[{ini.f, ini.c, ini.h}].push_back({ini.installs, ini.impacto});
+    etiquetas[{ini.f, ini.c, ini.h, (int)ini.ha_pasado_H}].push_back({ini.installs, ini.impacto});
   }
 
   while (!abiertos.empty())
@@ -1696,8 +1796,9 @@ list<ComportamientoIngeniero::Paso> ComportamientoIngeniero::BuscarPlanNivel4(co
 
     if (mapaResultado[cur.f][cur.c] == 'U')
     {
-      if (cur.installs < mejor_installs_u ||
-          (cur.installs == mejor_installs_u && cur.impacto < mejor_impacto_u))
+      if (cur.ha_pasado_H &&
+          (cur.installs < mejor_installs_u ||
+          (cur.installs == mejor_installs_u && cur.impacto < mejor_impacto_u)))
       {
         mejor_installs_u = cur.installs;
         mejor_impacto_u = cur.impacto;
@@ -1752,7 +1853,8 @@ list<ComportamientoIngeniero::Paso> ComportamientoIngeniero::BuscarPlanNivel4(co
         sig.impacto = nuevoImpacto;
         sig.plan.push_back({nf, nc, op});
 
-        auto key = make_tuple(sig.f, sig.c, sig.h);
+        sig.ha_pasado_H = cur.ha_pasado_H || (mapaResultado[nf][nc] == 'H');
+        auto key = make_tuple(sig.f, sig.c, sig.h, (int)sig.ha_pasado_H);
         auto &labs = etiquetas[key];
 
         // Dominancia: (a,b) domina a (x,y) si a<=x y b<=y.
@@ -2228,7 +2330,7 @@ Action ComportamientoIngeniero::ComportamientoIngenieroNivel_5(Sensores sensores
         int bfs_limit_mov = -1;
         if (sensores.nivel == 6)
           bfs_limit_mov = (mapaResultado.size() >= 90) ? 20000 : 5000;
-        plan_mov_n5 = B_Anchura_Ingeniero(inicio, objetivo_ing_n5, mapaResultado, mapaCotas, bfs_limit_mov);
+        plan_mov_n5 = B_Anchura_Supersticioso(inicio, objetivo_ing_n5, mapaResultado, mapaCotas, bfs_limit_mov);
 
         if (bloqueo_temporal)
           mapaResultado[bloque_f][bloque_c] = backup_bloqueo;
